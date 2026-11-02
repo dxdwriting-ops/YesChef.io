@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>chef.io</title>
+    <meta name="description" content="A co-op first-person kitchen .io game. Your station is your job." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/client/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- Menus -->
+    <section id="title">
+      <div class="title-card">
+        <header class="menu-head">
+          <h1 class="logo">chef<span>.io</span></h1>
+          <div class="wallet"><i class="coin"></i><b id="coins">0</b></div>
+        </header>
+        <div id="career" class="career">
+          <b id="career-level">Lv 1</b>
+          <span class="xpbar"><i id="career-xp"></i></span>
+          <small id="career-note">New chef</small>
+        </div>
+
+        <!-- Main menu -->
+        <div id="screen-main" class="screen">
+          <div class="profile-row">
+            <canvas id="portrait" class="portrait"></canvas>
+            <div>
+              <b id="chef-name">Chef</b>
+              <small id="streak-line"></small>
+              <button class="link" data-go="create">Edit chef</button>
+            </div>
+          </div>
+          <div class="modes">
+            <button class="mode primary wide" data-go="multi"><b>Multiplayer</b><small>Quick play: queue up with other chefs</small></button>
+            <button class="mode" data-go="career"><b>Career</b><small>Story mode, solo</small></button>
+            <button class="mode" data-go="challenge"><b>Challenges</b><small>Daily Special and score attack</small></button>
+            <button class="mode" data-go="shop"><b>Shop &amp; Locker</b><small>Gear, outfits, decor</small></button>
+            <button class="mode" id="go-training"><b>Training</b><small>2-minute tutorial</small></button>
+          </div>
+          <div class="dailies">
+            <h3>Daily quests <small id="quest-reset"></small></h3>
+            <ul id="quests"></ul>
+          </div>
+          <ul class="controls">
+            <li><kbd>Mouse</kbd> look</li>
+            <li><kbd>WASD</kbd> move</li>
+            <li><kbd>Shift</kbd> sprint</li>
+            <li><kbd>E</kbd> use station</li>
+            <li><kbd>Tab</kbd> peek</li>
+            <li><kbd>H</kbd> helper</li>
+            <li><kbd>G</kbd> graphics</li>
+            <li><kbd>N</kbd> music</li>
+          </ul>
+        </div>
+
+        <!-- Multiplayer -->
+        <div id="screen-multi" class="screen" hidden>
+          <button class="back" data-go="main">← Back</button>
+          <h2>Multiplayer</h2>
+          <p class="small-note">Pick a kitchen. You'll be matched with chefs who picked the same one; service starts when the crew is ready.</p>
+          <div id="tiers" class="tiers"></div>
+          <button id="join" class="btn primary">Find a kitchen</button>
+        </div>
+
+        <!-- Career -->
+        <div id="screen-career" class="screen" hidden>
+          <button class="back" data-go="main">← Back</button>
+          <h2>Career</h2>
+          <div id="chapters"></div>
+        </div>
+
+        <!-- Challenges -->
+        <div id="screen-challenge" class="screen" hidden>
+          <button class="back" data-go="main">← Back</button>
+          <h2>Challenges</h2>
+          <div id="challenges" class="list"></div>
+        </div>
+
+        <!-- Shop and locker -->
+        <div id="screen-shop" class="screen" hidden>
+          <button class="back" data-go="main">← Back</button>
+          <h2>Shop &amp; Locker</h2>
+          <div class="tabs" id="shop-tabs">
+            <button data-tab="equipment" aria-pressed="true">Equipment</button>
+            <button data-tab="hat">Hats</button>
+            <button data-tab="jacket">Jackets</button>
+            <button data-tab="decor">Decor</button>
+          </div>
+          <div class="shop-wrap">
+            <canvas id="shop-portrait" class="portrait small"></canvas>
+            <div id="shop-grid" class="list"></div>
+          </div>
+        </div>
+
+        <!-- Character creation -->
+        <div id="screen-create" class="screen" hidden>
+          <h2 id="create-title">Create your chef</h2>
+          <div class="create">
+            <canvas id="create-portrait" class="portrait big"></canvas>
+            <div class="create-fields">
+              <label class="field"><span>Name</span><input id="name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Chef" /></label>
+              <div class="field"><span>Skin tone</span><div id="skins" class="aprons"></div></div>
+              <div class="field"><span>Apron</span><div id="aprons" class="aprons"></div></div>
+              <div class="field"><span>Hat</span><div id="hats" class="aprons"></div></div>
+            </div>
+          </div>
+          <button id="create-done" class="btn primary">Let's cook!</button>
+        </div>
+
+        <!-- Shift briefing (career and challenges) -->
+        <div id="screen-brief" class="screen" hidden>
+          <button class="back" id="brief-back">← Back</button>
+          <small id="brief-kicker"></small>
+          <h2 id="brief-title"></h2>
+          <p id="brief-story" class="story"></p>
+          <ul id="brief-goals" class="goals"></ul>
+          <button id="brief-go" class="btn primary">Start shift</button>
+        </div>
+
+        <p id="join-error" class="error" hidden></p>
+        <p class="small-note footer-links"><a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      </div>
+      <div id="ad-banner" class="ad-slot" hidden></div>
+    </section>
+
+    <div id="daily-popup" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="daily-title">Daily reward</h2>
+        <div id="daily-days" class="days"></div>
+        <p id="daily-text"></p>
+        <button id="daily-ok" class="btn primary">Collect</button>
+      </div>
+    </div>
+
+    <!-- In-game HUD -->
+    <section id="hud" hidden>
+      <div class="rail-wrap">
+        <div id="tickets"></div>
+        <div id="rail-empty" class="ticket empty" hidden>Rail's clear. Prep ahead!</div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><small>Time</small><b id="stat-time">0:00</b></div>
+        <div class="stat"><small>Score</small><b id="stat-score">0</b></div>
+        <div class="stat"><small>Strikes</small><b id="stat-strikes" class="strikes"></b></div>
+        <div class="stat wide"><small id="stat-tier">Food Truck</small><b id="stat-plates">3 clean</b></div>
+      </div>
+      <div id="combo" hidden><b>Combo</b><span><i></i></span></div>
+      <div id="rush" hidden>RUSH HOUR</div>
+
+      <ul id="crew"></ul>
+      <div id="crosshair"></div>
+      <div id="prompt" hidden></div>
+      <div id="guide" hidden></div>
+      <div id="coach" hidden><small>Coach</small><b></b><p></p></div>
+      <div id="hint" hidden></div>
+      <div id="peeks" hidden></div>
+      <div id="held" hidden><img alt="" /><span></span></div>
+      <div id="toasts"></div>
+      <div id="banner" class="banner" hidden></div>
+      <div id="flash"></div>
+      <div class="pings-help"><kbd>1</kbd> Heard <kbd>2</kbd> Behind <kbd>3</kbd> Plates <kbd>4</kbd> 86 · <kbd>M</kbd> <span id="sound-state">sound on</span> <kbd>N</kbd> <span id="music-state">music on</span> <kbd>G</kbd> graphics</div>
+    </section>
+
+    <div id="minigame" hidden></div>
+
+    <!-- Waiting room inside the kitchen -->
+    <section id="lobby" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="lobby-title">Pre-shift huddle</h2>
+        <p id="lobby-tier"></p>
+        <p id="lobby-queue" class="queue" hidden></p>
+        <ul id="lobby-goals" class="goals" hidden></ul>
+        <ol id="checklist" class="checklist"></ol>
+        <ul id="lobby-crew" class="crew-list"></ul>
+        <button id="start-service" class="btn primary">Start service</button>
+        <button id="train" class="btn secondary">Training shift (2 min)</button>
+        <button class="btn secondary to-menu">Main menu</button>
+      </div>
+    </section>
+
+    <section id="results" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="results-title">Service over</h2>
+        <div id="results-stars" class="stars"></div>
+        <ul id="results-goals" class="goals" hidden></ul>
+        <dl class="results-grid">
+          <dt>Score</dt><dd id="results-score">0</dd>
+          <dt>Served</dt><dd id="results-served">0</dd>
+          <dt>Walk-outs</dt><dd id="results-missed">0</dd>
+          <dt>Best combo</dt><dd id="results-combo">x0</dd>
+        </dl>
+        <div id="results-xp" class="results-xp" hidden>
+          <div class="xp-line"><b id="xp-gain">+0 XP</b><span id="coin-gain"></span><span id="xp-level">Lv 1</span></div>
+          <span class="xpbar"><i id="xp-bar"></i></span>
+          <ul id="xp-news"></ul>
+        </div>
+        <button id="double-coins" class="btn secondary" hidden>Watch an ad: double your coins</button>
+        <button id="play-again" class="btn primary">Run it back</button>
+        <button id="next-level" class="btn primary" hidden>Next shift</button>
+        <button class="btn secondary to-menu">Main menu</button>
+      </div>
+    </section>
+
+    <script type="module" src="/client/main.ts"></script>
+  </body>
+</html>

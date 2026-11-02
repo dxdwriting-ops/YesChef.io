@@ -1,0 +1,13 @@
+# Render blueprint: one web service runs the Colyseus game server and serves the built game.
+# In Render: New > Blueprint, pick this repository, and apply.
+services:
+  - type: web
+    name: chef-io
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

@@ -1,0 +1,39 @@
+{
+  "name": "chef-io",
+  "version": "1.0.0",
+  "description": "chef.io - co-op first-person kitchen .io game",
+  "main": "server/index.ts",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "server": "tsx watch server/index.ts",
+    "client": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p .",
+    "start": "tsx server/index.ts",
+    "build:itch": "node scripts/build-itch.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@colyseus/schema": "^5.0.43",
+    "@colyseus/sdk": "^0.18.9",
+    "@colyseus/tools": "^0.18.11",
+    "colyseus": "^0.18.10",
+    "express": "^5.3.0",
+    "three": "^0.187.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "msgpackr-extract": false
+  }
+}
