@@ -9,14 +9,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const server = process.argv[2] ?? process.env.VITE_SERVER_URL;
 
 if (!server || !/^wss?:\/\//.test(server)) {
-  console.error("Pass your game server's address, for example:\n  npm run build:itch -- wss://chef-io.onrender.com");
+  console.error("Pass your game server's address, for example:\n  npm run build:itch -- wss://yeschef-io.onrender.com");
   process.exit(1);
 }
 
 console.log(`Building for itch.io, connecting to ${server} ...`);
 execSync("npx vite build", { cwd: root, stdio: "inherit", env: { ...process.env, VITE_SERVER_URL: server } });
 
-const zip = resolve(root, "chef-io-itch.zip");
+const zip = resolve(root, "yeschef-io-itch.zip");
 if (existsSync(zip)) rmSync(zip);
 const dist = resolve(root, "dist");
 if (process.platform === "win32") {

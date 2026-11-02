@@ -2,7 +2,7 @@
 # In Render: New > Blueprint, pick this repository, and apply.
 services:
   - type: web
-    name: chef-io
+    name: yeschef-io
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build

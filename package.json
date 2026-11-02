@@ -1,7 +1,7 @@
 {
-  "name": "chef-io",
+  "name": "yeschef-io",
   "version": "1.0.0",
-  "description": "chef.io - co-op first-person kitchen .io game",
+  "description": "YesChef.io - co-op first-person kitchen .io game",
   "main": "server/index.ts",
   "scripts": {
     "dev": "node scripts/dev.mjs",

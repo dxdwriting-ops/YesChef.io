@@ -1,4 +1,4 @@
-# chef.io
+# YesChef.io
 
 A co-op, first-person kitchen .io game in 2.5D pixel cel shading. Your crew works one dinner service together, and **where you stand is your job**: the walk-in, prep boards, grill, fryer, pass and dish pit each play differently.
 

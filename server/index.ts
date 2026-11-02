@@ -27,4 +27,4 @@ await listen(
   }),
   port,
 );
-console.log(`chef.io kitchen server listening on port ${port}`);
+console.log(`YesChef.io kitchen server listening on port ${port}`);
