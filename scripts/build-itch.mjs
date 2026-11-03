@@ -22,7 +22,9 @@ const dist = resolve(root, "dist");
 if (process.platform === "win32") {
   // Windows' built-in tar writes forward-slash paths; PowerShell's Compress-Archive writes
   // backslashes, which itch.io's servers can't resolve.
-  execSync(`tar -a -c -f "${zip}" -C "${dist}" *`, { stdio: "inherit" });
+  // Call it by full path: Git Bash's GNU tar would read "C:\..." as a remote host.
+  const tar = resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe");
+  execSync(`"${tar}" -a -c -f "${zip}" -C "${dist}" *`, { stdio: "inherit" });
 } else {
   execSync(`cd "${dist}" && zip -r "${zip}" .`, { stdio: "inherit", shell: "/bin/sh" });
 }
