@@ -10,8 +10,9 @@ export const Player = schema(
     x: t.float32().default(0),
     z: t.float32().default(0),
     yaw: t.float32().default(0),
-    holding: t.string().default(""),
-    holdingQ: t.float32().default(1),
+    hands: t.array("string"), // what this chef carries, one item per slot
+    handsQ: t.array("float32"), // quality of each carried item (0-1), feeds the tip
+    slots: t.uint8().default(3),
     station: t.string().default(""),
   },
   "Player",
@@ -20,8 +21,8 @@ export const Player = schema(
 export const Station = schema(
   {
     kind: t.string().default(""),
-    item: t.string().default(""), // fryer contents
-    progress: t.float32().default(0), // fryer seconds
+    item: t.string().default(""), // what's in the fryer basket
+    progress: t.float32().default(0), // seconds it has been frying
     user: t.string().default(""), // sessionId of the cook working it
   },
   "Station",
@@ -48,7 +49,9 @@ export const KitchenState = schema(
     mode: t.string().default("quick"), // quick | career | challenge | training
     title: t.string().default(""),
     queueLeft: t.float32().default(0), // quick play countdown once 2+ chefs are in
-    timeLeft: t.float32().default(0),
+    elapsed: t.float32().default(0), // seconds since service opened (no clock: the shift ends when the tickets do)
+    lastCall: t.boolean().default(false), // the night's final ticket is on the rail
+    paused: t.boolean().default(false), // solo runs can pause
     score: t.int32().default(0),
     served: t.uint16().default(0),
     missed: t.uint16().default(0),

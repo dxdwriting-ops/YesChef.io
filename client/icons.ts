@@ -34,18 +34,77 @@ function sticks(g: Ctx, c: string, dark: string, y0: number) {
   }
 }
 
+function bunIcon(g: Ctx, top: string, base: string, crumb: string) {
+  blob(g, 7, 6, 6, 3, top);
+  px(g, 1, 9, 13, 1, crumb);
+  blob(g, 7, 11, 6, 1, base);
+  px(g, 4, 5, 1, 1, "#fbf0cf");
+  px(g, 8, 4, 1, 1, "#fbf0cf");
+  px(g, 10, 6, 1, 1, "#fbf0cf");
+}
+
+function ring(g: Ctx, c: string, dark: string) {
+  for (const [cx, cy] of [[5, 8], [10, 10]]) {
+    blob(g, cx, cy, 4, 4, c);
+    g.clearRect(cx - 1, cy - 1, 3, 3);
+    px(g, cx - 3, cy, 1, 1, dark);
+  }
+}
+
 const DRAW: Record<ItemId, (g: Ctx) => void> = {
-  bun: (g) => {
-    blob(g, 7, 6, 6, 3, "#e3a24c");
-    px(g, 1, 9, 13, 1, "#f3e3c0");
-    blob(g, 7, 11, 6, 1, "#c98431");
-    px(g, 4, 5, 1, 1, "#fbf0cf");
-    px(g, 8, 4, 1, 1, "#fbf0cf");
-    px(g, 10, 6, 1, 1, "#fbf0cf");
+  bun: (g) => bunIcon(g, "#e3a24c", "#c98431", "#f3e3c0"),
+  bun_toasted: (g) => {
+    bunIcon(g, "#b8722e", "#8a4f1c", "#d9a35a");
+    px(g, 3, 9, 2, 1, "#5e2f18");
+    px(g, 7, 9, 2, 1, "#5e2f18");
+    px(g, 11, 9, 2, 1, "#5e2f18");
+  },
+  beef: (g) => {
+    blob(g, 7, 9, 6, 4, "#d9706a");
+    for (const [x, y] of [[3, 8], [6, 7], [9, 9], [11, 7], [5, 10], [8, 11]]) px(g, x, y, 2, 1, "#f4b6ad");
+    px(g, 2, 12, 12, 2, "#e8e2d6"); // butcher paper
   },
   patty_raw: (g) => patty(g, "#e38b80", "#c3655a", "#f4b6ad"),
   patty_cooked: (g) => patty(g, "#8a4a2a", "#5e2f18", "#3a1c0d"),
-  patty_burnt: (g) => patty(g, "#2b2522", "#161210", "#4a403a"),
+  cheese: (g) => {
+    px(g, 2, 6, 12, 7, "#f2c94c");
+    px(g, 2, 6, 12, 2, "#f9e08a");
+    px(g, 4, 9, 2, 2, "#d9a92a");
+    px(g, 9, 10, 2, 1, "#d9a92a");
+  },
+  cheese_sliced: (g) => {
+    for (const o of [0, 3]) {
+      px(g, 2 + o, 5 + o, 9, 5, "#f2c94c");
+      px(g, 2 + o, 5 + o, 9, 1, "#f9e08a");
+    }
+    px(g, 7, 10, 2, 1, "#d9a92a");
+  },
+  onion: (g) => {
+    blob(g, 7, 9, 5, 5, "#c9a0c9");
+    px(g, 7, 4, 1, 10, "#e8d3e8");
+    px(g, 6, 2, 3, 2, "#8fb36a");
+  },
+  onion_sliced: (g) => ring(g, "#efe3ef", "#c9a0c9"),
+  onion_rings: (g) => ring(g, "#d9a03a", "#a8691c"),
+  chicken: (g) => {
+    blob(g, 7, 9, 6, 4, "#f2b8a8");
+    blob(g, 6, 8, 3, 2, "#f9d3c8");
+  },
+  chicken_breaded: (g) => {
+    blob(g, 7, 9, 6, 4, "#e8d3a0");
+    for (const [x, y] of [[3, 8], [7, 7], [10, 10], [5, 11]]) px(g, x, y, 1, 1, "#c9a96a");
+  },
+  chicken_fried: (g) => {
+    blob(g, 7, 9, 6, 4, "#c98431");
+    for (const [x, y] of [[3, 8], [7, 7], [10, 10], [5, 11], [9, 8]]) px(g, x, y, 1, 1, "#f2c94c");
+  },
+  burnt: (g) => {
+    blob(g, 7, 9, 6, 3, "#2b2522");
+    px(g, 4, 8, 2, 1, "#4a403a");
+    px(g, 9, 10, 2, 1, "#4a403a");
+    px(g, 6, 3, 1, 3, "#8c8288"); // smoke
+    px(g, 9, 2, 1, 3, "#8c8288");
+  },
   lettuce: (g) => {
     blob(g, 7, 8, 6, 5, "#4fae3c");
     blob(g, 7, 8, 4, 3, "#7cd35c");
@@ -82,10 +141,6 @@ const DRAW: Record<ItemId, (g: Ctx) => void> = {
     sticks(g, "#f2c94c", "#c9952a", 9);
     px(g, 3, 9, 10, 5, "#d63d3d");
     px(g, 4, 10, 8, 1, "#f06a5a");
-  },
-  fries_burnt: (g) => {
-    sticks(g, "#4a3a22", "#231a0f", 9);
-    px(g, 3, 9, 10, 5, "#7a2c2c");
   },
 };
 

@@ -42,21 +42,13 @@
             <button class="mode" data-go="challenge"><b>Challenges</b><small>Daily Special and score attack</small></button>
             <button class="mode" data-go="shop"><b>Shop &amp; Locker</b><small>Gear, outfits, decor</small></button>
             <button class="mode" id="go-training"><b>Training</b><small>2-minute tutorial</small></button>
+            <button class="mode" id="go-settings"><b>Settings</b><small>Controls, mouse look, graphics</small></button>
           </div>
           <div class="dailies">
             <h3>Daily quests <small id="quest-reset"></small></h3>
             <ul id="quests"></ul>
           </div>
-          <ul class="controls">
-            <li><kbd>Mouse</kbd> look</li>
-            <li><kbd>WASD</kbd> move</li>
-            <li><kbd>Shift</kbd> sprint</li>
-            <li><kbd>E</kbd> use station</li>
-            <li><kbd>Tab</kbd> peek</li>
-            <li><kbd>H</kbd> helper</li>
-            <li><kbd>G</kbd> graphics</li>
-            <li><kbd>N</kbd> music</li>
-          </ul>
+          <ul class="controls" id="controls-list"></ul>
         </div>
 
         <!-- Multiplayer -->
@@ -146,7 +138,7 @@
       </div>
 
       <div class="stats">
-        <div class="stat"><small>Time</small><b id="stat-time">0:00</b></div>
+        <div class="stat"><small id="stat-time-label">Served</small><b id="stat-time">0</b></div>
         <div class="stat"><small>Score</small><b id="stat-score">0</b></div>
         <div class="stat"><small>Strikes</small><b id="stat-strikes" class="strikes"></b></div>
         <div class="stat wide"><small id="stat-tier">Food Truck</small><b id="stat-plates">3 clean</b></div>
@@ -161,11 +153,12 @@
       <div id="coach" hidden><small>Coach</small><b></b><p></p></div>
       <div id="hint" hidden></div>
       <div id="peeks" hidden></div>
-      <div id="held" hidden><img alt="" /><span></span></div>
+      <div id="hands"></div>
+      <div id="fps" hidden></div>
       <div id="toasts"></div>
       <div id="banner" class="banner" hidden></div>
       <div id="flash"></div>
-      <div class="pings-help"><kbd>1</kbd> Heard <kbd>2</kbd> Behind <kbd>3</kbd> Plates <kbd>4</kbd> 86 · <kbd>M</kbd> <span id="sound-state">sound on</span> <kbd>N</kbd> <span id="music-state">music on</span> <kbd>G</kbd> graphics</div>
+      <div class="pings-help" id="pings-help"></div>
     </section>
 
     <div id="minigame" hidden></div>
@@ -195,6 +188,7 @@
           <dt>Served</dt><dd id="results-served">0</dd>
           <dt>Walk-outs</dt><dd id="results-missed">0</dd>
           <dt>Best combo</dt><dd id="results-combo">x0</dd>
+          <dt>Shift time</dt><dd id="results-time">0:00</dd>
         </dl>
         <div id="results-xp" class="results-xp" hidden>
           <div class="xp-line"><b id="xp-gain">+0 XP</b><span id="coin-gain"></span><span id="xp-level">Lv 1</span></div>
@@ -205,6 +199,38 @@
         <button id="play-again" class="btn primary">Run it back</button>
         <button id="next-level" class="btn primary" hidden>Next shift</button>
         <button class="btn secondary to-menu">Main menu</button>
+      </div>
+    </section>
+
+    <!-- Esc: pause (solo kitchens stop; multiplayer keeps cooking) -->
+    <section id="pause" class="overlay" hidden>
+      <div class="panel">
+        <h2>Paused</h2>
+        <p id="pause-note" class="small-note"></p>
+        <button id="pause-resume" class="btn primary">Resume</button>
+        <button id="pause-settings" class="btn secondary">Settings</button>
+        <button class="btn secondary to-menu">Leave shift</button>
+      </div>
+    </section>
+
+    <section id="settings" class="overlay" hidden>
+      <div class="panel settings-panel">
+        <h2>Settings</h2>
+        <div class="settings-body">
+          <h3>Mouse look</h3>
+          <div id="set-look" class="seg"></div>
+          <p id="set-look-blurb" class="small-note"></p>
+          <label class="set-row"><span>Sensitivity <b id="set-sens-val"></b></span><input id="set-sens" type="range" min="0.25" max="3" step="0.05" /></label>
+          <label class="set-row check"><input id="set-invert" type="checkbox" /> <span>Invert vertical look</span></label>
+          <h3>Graphics &amp; performance</h3>
+          <div id="set-quality" class="seg"></div>
+          <label class="set-row check"><input id="set-autores" type="checkbox" /> <span>Auto resolution: drop pixels to keep it smooth</span></label>
+          <label class="set-row check"><input id="set-fps" type="checkbox" /> <span>Show frame rate</span></label>
+          <h3>Controls <small>click a key, then press the new one</small></h3>
+          <div id="set-keys" class="keys"></div>
+          <button id="set-reset" class="link">Reset controls to default</button>
+        </div>
+        <button id="set-done" class="btn primary">Done</button>
       </div>
     </section>
 

@@ -17,35 +17,48 @@ To point the client at a hosted server, set `VITE_SERVER_URL` (for example `wss:
 
 ## How to play
 
+Every key can be rebound in **Settings** (main menu, or Esc in game). The defaults:
+
 | Key | Action |
 | --- | --- |
-| Drag mouse / ← → | Look around |
-| WASD / ↑ ↓ | Move (Shift to hustle) |
+| Mouse | Look around: **hold to look** (default), **follow the mouse**, or **mouse lock**, picked in Settings |
+| WASD, ← → | Move, turn (Shift to sprint) |
 | E | Use the station you're facing |
+| 1-4, Q, mouse wheel | Pick a hand slot (Trash throws away the selected one) |
+| Space or mouse | Mini-game action: chop, sear, toast |
 | Tab | Peek at flipped tickets (limited peeks) |
 | H | Toggle the step-by-step helper |
-| 1-4 | Crew pings: Heard! / Behind! / Need plates! / 86 that! |
+| Z X C V | Crew calls: Heard! / Behind! / Need plates! / 86 that! |
 | G | Graphics: Retro / Sharp / HD + shadows |
 | N / M | Music / sound effects on or off |
-| L | Lock the mouse (optional) |
-| Esc | Step away from a station |
+| Esc | Pause (solo kitchens stop; multiplayer keeps cooking), or step away from a station |
 
-Tickets slide onto the rail. Build each dish and send its parts to the **pass**; a finished ticket needs a **clean plate** to go out, and plates come back dirty a few seconds later.
+Tickets slide onto the rail. There's **no clock**: a shift lasts an unknown number of orders (say 15, 20 or 30) and ends when the last ticket is served or walks out. **Last call** tells you the final ticket is on the rail. A finished ticket needs a **clean plate** to go out, and plates come back dirty a few seconds later.
 
-**Easy to start:** the helper (on by default at the Food Truck) tells you the next move and points a bouncing arrow at the station; the menu chalkboard shows every recipe; the pre-shift huddle has a practice checklist.
+You have **three hands** (four with the Sheet Tray), so you can grab everything for a dish in one walk-in trip, prep or grill it all in one stop, and send it all at the pass with one press.
 
-**Memory and speed:** orders can come with modifiers (No lettuce, + Tomato, Double patty...). At the Diner and Bistro, tickets **flip face-down** after a few seconds, so read them, remember them, and peek sparingly. Serving back to back builds a **combo** (up to x2 points), and **rush hour** hits just past halfway.
+**Easy to start:** the helper (on by default at the Food Truck) plans your next trip and points a bouncing arrow at the station; the menu chalkboard shows every recipe; the pre-shift huddle has a practice checklist.
 
-**Music:** original light Japanese jazz / city-pop, generated live in the browser (Rhodes, walking bass, brushed drums, vinyl crackle). It gets busier during rush hour.
+**Memory and speed:** orders can come with modifiers (No lettuce, + Cheese, Double patty...). At the Diner and Bistro, tickets **flip face-down** after a few seconds, so read them, remember them, and peek sparingly. Serving back to back builds a **combo** (up to x2 points), and **rush hour** hits about halfway through the night.
 
-- **Walk-in:** grab buns, raw patties, lettuce, tomatoes, potatoes.
-- **Prep:** rhythm chopping. Tap Space as the knife crosses each mark. Cleaner cuts mean bigger tips.
-- **Grill:** hold Space to sear, release in the green window. Too long and it burns.
-- **Fryer:** drop cut potatoes, then pull them between 6 and 11 seconds. It keeps cooking while you do other things.
-- **Dish pit:** alternate A and D to scrub plates.
-- **Trash:** toss mistakes.
+**Music:** original light Japanese jazz / city-pop, generated live in the browser (Rhodes, walking bass, brushed drums, vinyl crackle). It gets busier during rush hour and last call.
 
-Expired tickets are walk-outs (strikes). Score = base + speed bonus + quality tip; stars at the end.
+| Dish | Route |
+| --- | --- |
+| Smash Burger | bun → grill (toast) · ground beef → prep (form) → grill (sear) · lettuce → prep (chop) |
+| Fries | potato → prep (cut) → fryer |
+| Garden Salad | lettuce → prep · tomato → prep |
+| Onion Rings | onion → prep (ring) → fryer |
+| Crispy Chicken | bun → grill · chicken → prep (bread) → fryer · lettuce → prep |
+
+- **Walk-in:** pick one ingredient per free hand, then close it (E or Enter).
+- **Prep:** rhythm knife work. Hit Space (or click) as the knife crosses each mark. Holding several things to prep? They run back to back.
+- **Grill:** hold Space (or the mouse) to sear or toast, release in the green window. Buns toast faster than patties sear.
+- **Fryer:** drop a basket and come back. Fries, rings and chicken each have their own timing; pulling needs a free hand.
+- **Dish pit:** alternate your strafe keys (A and D) to scrub plates.
+- **Trash:** toss mistakes and burnt food.
+
+Expired tickets are walk-outs (strikes). Score = base + speed bonus + quality tip. Stars come from your average points per ticket, so short and long nights are judged the same.
 
 ## Ways to play
 
@@ -58,7 +71,7 @@ Expired tickets are walk-outs (strikes). Score = base + speed bonus + quality ti
 
 Every shift pays **XP** (levels) and **coins**. Spend coins in the **Shop & Locker**:
 
-- **Equipment** with real perks: Santoku Knife (wider cut marks), Cast-Iron Plancha (wider sear window), Kitchen Clogs (+10% speed), Turbo Fryer, Bus Cart and Ticket Printer (solo-mode kitchen perks).
+- **Equipment** with real perks: Santoku Knife (wider cut marks), Cast-Iron Plancha (wider sear window), Kitchen Clogs (+10% speed), Sheet Tray (a fourth hand slot), Turbo Fryer, Bus Cart and Ticket Printer (solo-mode kitchen perks).
 - **Hats and jackets** that other players see on your chef.
 - **Decor** that appears in your kitchen: rug, plant, poster, string lights, paper lanterns, neon sign, lucky cat.
 
@@ -69,8 +82,8 @@ Come back daily for a **login streak** (day 7 drops a mystery crate) and **three
 | Tier | Menu | What gets harder |
 | --- | --- | --- |
 | Food Truck | Burger, fries | Forgiving timers, 5 strikes |
-| Diner | + Salad | Faster tickets, narrower grill window |
-| Bistro | All | Tight tickets, thin grill window, 3 strikes |
+| Diner | + Salad, Onion Rings | Faster tickets, flipping tickets, narrower grill window |
+| Bistro | + Crispy Chicken | Tight tickets, thin grill window, 3 strikes |
 | Ramen Bar, Bakery, Steakhouse, Tasting Room | Coming soon | Simmer timers, proofing, doneness, course pacing |
 
 Tier tuning lives in `shared/game.ts` (`TIERS`).

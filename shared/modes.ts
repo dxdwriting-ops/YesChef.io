@@ -1,6 +1,6 @@
 // Ways to play: multiplayer quick play, a story career, challenges, and training.
 // Every mode boils down to a Rules object the server runs.
-import { FRY_BURNT, FRY_READY, PLATE_RETURN_DELAY, START_PLATES, TIERS, isPlayableTier, type RecipeId, type Tier, type TierId } from "./game";
+import { BASE_SLOTS, FRY_BURNT, FRY_READY, MAX_SLOTS, PLATE_RETURN_DELAY, START_PLATES, TIERS, isPlayableTier, type RecipeId, type Tier, type TierId } from "./game";
 import type { LayoutId } from "./layouts";
 import type { Perks } from "./meta";
 
@@ -15,6 +15,7 @@ export interface Rules extends Tier {
   fryReady: number;
   fryBurnt: number;
   plateDelay: number;
+  slots: number; // hand slots for this chef
 }
 
 export const TIER_LAYOUT: Partial<Record<TierId, LayoutId>> = { foodtruck: "truck", diner: "diner", bistro: "bistro" };
@@ -24,6 +25,7 @@ export interface Goal {
   score?: number; // reach this score
   maxMissed?: number; // no more walk-outs than this
   combo?: number; // hit this combo at least once
+  stars?: number; // finish with at least this many stars
 }
 
 export function goalText(g: Goal): string[] {
@@ -32,15 +34,17 @@ export function goalText(g: Goal): string[] {
   if (g.score) out.push(`Score ${g.score}+`);
   if (g.maxMissed !== undefined) out.push(g.maxMissed === 0 ? "No walk-outs" : `At most ${g.maxMissed} walk-outs`);
   if (g.combo) out.push(`Hit a x${g.combo} combo streak`);
+  if (g.stars) out.push(`Earn ${"★".repeat(g.stars)}`);
   return out;
 }
 
-export function goalsMet(g: Goal, r: { served: number; score: number; missed: number; bestCombo: number }): boolean[] {
+export function goalsMet(g: Goal, r: { served: number; score: number; missed: number; bestCombo: number; stars: number }): boolean[] {
   const met: boolean[] = [];
   if (g.serve) met.push(r.served >= g.serve);
   if (g.score) met.push(r.score >= g.score);
   if (g.maxMissed !== undefined) met.push(r.missed <= g.maxMissed);
   if (g.combo) met.push(r.bestCombo >= g.combo);
+  if (g.stars) met.push(r.stars >= g.stars);
   return met;
 }
 
@@ -70,9 +74,9 @@ export const CAREER: Chapter[] = [
         id: "1-1",
         name: "Opening Night",
         tier: "foodtruck",
-        story: "Just burgers tonight. Take your time and learn the line.",
+        story: "Just burgers tonight. Grab everything for one in a single trip, then work down the line.",
         goal: { serve: 3 },
-        rules: { duration: 120, recipes: ["burger"], modChance: 0, maxTickets: 2, orderEvery: [18, 24], ticketTime: 100, helperDefault: true },
+        rules: { orders: [4, 5], recipes: ["burger"], modChance: 0, maxTickets: 2, orderEvery: [20, 26], ticketTime: 120, helperDefault: true },
       },
       {
         id: "1-2",
@@ -80,14 +84,14 @@ export const CAREER: Chapter[] = [
         tier: "foodtruck",
         story: "Word's out. Folks want fries with that. Remember: the fryer cooks while you work.",
         goal: { serve: 5 },
-        rules: { duration: 150, recipes: ["burger", "fries"], modChance: 0, maxTickets: 3, ticketTime: 95 },
+        rules: { orders: [6, 7, 8], recipes: ["burger", "fries"], modChance: 0, maxTickets: 3, ticketTime: 110 },
       },
       {
         id: "1-3",
         name: "Street Festival",
         tier: "foodtruck",
-        story: "The whole block turned up, and some of them want their burgers their way.",
-        goal: { score: 60, maxMissed: 2 },
+        story: "The whole block turned up, and some of them want their burgers their way. Nobody knows when the line ends.",
+        goal: { stars: 1, maxMissed: 2 },
         rules: {},
       },
     ],
@@ -102,23 +106,23 @@ export const CAREER: Chapter[] = [
         name: "Salad Days",
         tier: "diner",
         story: "The lunch crowd wants something green. Salads hit the menu.",
-        goal: { serve: 5 },
-        rules: { duration: 150, flipAfter: 0, modChance: 0.1, orderEvery: [13, 18] },
+        goal: { serve: 6 },
+        rules: { orders: [8, 10], recipes: ["burger", "fries", "salad"], flipAfter: 0, modChance: 0.1, orderEvery: [14, 18] },
       },
       {
         id: "2-2",
         name: "Hold the Lettuce",
         tier: "diner",
         story: "Regulars are picky. Read every ticket. Then it flips, so remember it!",
-        goal: { serve: 6, maxMissed: 2 },
-        rules: { duration: 180, modChance: 0.6, flipAfter: 12, peeks: 4 },
+        goal: { serve: 8, maxMissed: 2 },
+        rules: { orders: [10, 12], recipes: ["burger", "fries", "salad"], modChance: 0.6, flipAfter: 12, peeks: 4 },
       },
       {
         id: "2-3",
         name: "Breakfast Rush",
         tier: "diner",
-        story: "Saturday morning. The line's out the door. Keep the combo alive.",
-        goal: { score: 120, combo: 3 },
+        story: "Saturday morning, and onion rings are the new special. The line's out the door. Keep the combo alive.",
+        goal: { stars: 2, combo: 3 },
         rules: {},
       },
     ],
@@ -133,23 +137,23 @@ export const CAREER: Chapter[] = [
         name: "Learning the Rooms",
         tier: "bistro",
         story: "Cold room in the back, dish room by the door. Learn the routes before the rush.",
-        goal: { serve: 6 },
-        rules: { duration: 180, modChance: 0.3, flipAfter: 10, orderEvery: [10, 14], maxStrikes: 5 },
+        goal: { serve: 8 },
+        rules: { orders: [10, 12], modChance: 0.3, flipAfter: 10, orderEvery: [11, 15], maxStrikes: 5 },
       },
       {
         id: "3-2",
         name: "Dish Room Blues",
         tier: "bistro",
         story: "The dishwasher called in sick. One clean plate to start. Don't forget the sink.",
-        goal: { serve: 8, maxMissed: 2 },
-        rules: { duration: 210, startPlates: 1, flipAfter: 8, maxStrikes: 4 },
+        goal: { serve: 10, maxMissed: 2 },
+        rules: { orders: [12, 15], startPlates: 1, flipAfter: 8, maxStrikes: 4 },
       },
       {
         id: "3-3",
         name: "The Critic",
         tier: "bistro",
         story: "A food critic is in the dining room tonight. One walk-out and it's in the paper.",
-        goal: { score: 320, maxMissed: 1 },
+        goal: { stars: 2, maxMissed: 1 },
         rules: {},
       },
     ],
@@ -170,30 +174,30 @@ const BASE_CHALLENGES: Challenge[] = [
   {
     id: "blitz",
     name: "Burger Blitz",
-    blurb: "90 seconds. Burgers only, lots of mods, orders flying in.",
+    blurb: "Burgers only, lots of mods, tickets flying in until the crowd's fed.",
     tier: "diner",
-    rules: { duration: 90, recipes: ["burger"], modChance: 0.8, orderEvery: [5, 8], maxTickets: 5, flipAfter: 0, maxStrikes: 99, stars: [120, 260, 420] },
+    rules: { orders: [20, 25], recipes: ["burger"], modChance: 0.8, orderEvery: [7, 10], maxTickets: 5, flipAfter: 0, maxStrikes: 99, stars: [40, 62, 85] },
   },
   {
     id: "memory",
     name: "Memory Lane",
     blurb: "Tickets flip after 3 seconds and you get one peek. Pure recall.",
     tier: "diner",
-    rules: { duration: 150, modChance: 0.7, flipAfter: 3, peeks: 1, orderEvery: [12, 16], stars: [80, 200, 330] },
+    rules: { orders: [12, 15], recipes: ["burger", "fries", "salad"], modChance: 0.7, flipAfter: 3, peeks: 1, orderEvery: [12, 16] },
   },
   {
     id: "fry",
     name: "Fry Cook",
-    blurb: "Two fryers, fries only. Juggle the baskets without burning a batch.",
+    blurb: "Two fryers, fries and onion rings. Juggle the baskets without burning a batch.",
     tier: "bistro",
-    rules: { duration: 120, recipes: ["fries"], modChance: 0.4, orderEvery: [6, 9], maxTickets: 5, flipAfter: 0, maxStrikes: 99, stars: [90, 210, 340] },
+    rules: { orders: [15, 20], recipes: ["fries", "rings"], modChance: 0.4, orderEvery: [6, 9], maxTickets: 5, flipAfter: 0, maxStrikes: 99, stars: [20, 32, 45] },
   },
   {
     id: "plates",
     name: "Plate Panic",
     blurb: "One clean plate, a sink across the kitchen, and a hungry crowd.",
     tier: "bistro",
-    rules: { duration: 150, startPlates: 1, flipAfter: 0, maxStrikes: 99, stars: [80, 190, 300] },
+    rules: { orders: [12, 15], startPlates: 1, flipAfter: 0, maxStrikes: 99 },
   },
 ];
 
@@ -202,7 +206,10 @@ export function dailyChallenge(date = new Date()): Challenge {
   const seed = date.getFullYear() * 1000 + date.getMonth() * 40 + date.getDate();
   const pick = <T,>(list: T[], salt: number) => list[(seed * 31 + salt * 17) % list.length];
   const tier = pick<TierId>(["foodtruck", "diner", "bistro"], 1);
-  const recipes = pick<RecipeId[]>([["burger"], ["burger", "fries"], ["burger", "salad"], ["burger", "fries", "salad"]], 2);
+  const recipes = pick<RecipeId[]>(
+    [["burger"], ["burger", "fries"], ["burger", "salad"], ["burger", "fries", "salad"], ["burger", "rings"], ["chicken", "fries"]],
+    2,
+  );
   const flip = pick([0, 0, 6, 9], 3);
   const mods = pick([0.2, 0.5, 0.8], 4);
   return {
@@ -210,7 +217,7 @@ export function dailyChallenge(date = new Date()): Challenge {
     name: "Daily Special",
     blurb: `${TIERS[tier].name} kitchen · ${recipes.join(" + ")} · ${flip ? `tickets flip at ${flip}s` : "no flips"} · ${Math.round(mods * 100)}% mods`,
     tier,
-    rules: { duration: 150, recipes, flipAfter: flip, peeks: flip ? 3 : 0, modChance: mods, maxStrikes: 99, stars: [90, 220, 360] },
+    rules: { orders: [12, 15, 18], recipes, flipAfter: flip, peeks: flip ? 3 : 0, modChance: mods, maxStrikes: 99, stars: [25, 45, 65] },
   };
 }
 
@@ -249,6 +256,7 @@ export function rulesFor(opts: RoomOptions): Rules {
   }
 
   const base = TIERS[tier];
+  const perks = opts.perks ?? {};
   const { startPlates, ...tierOverrides } = overrides;
   const rules: Rules = {
     ...base,
@@ -261,10 +269,10 @@ export function rulesFor(opts: RoomOptions): Rules {
     fryReady: FRY_READY,
     fryBurnt: FRY_BURNT,
     plateDelay: PLATE_RETURN_DELAY,
+    slots: perks.tray ? MAX_SLOTS : BASE_SLOTS,
   };
 
   // Equipment perks. Ones that change the shared kitchen only apply in solo modes, so co-op stays even.
-  const perks = opts.perks ?? {};
   const solo = mode !== "quick";
   if (solo && perks.fryer) {
     rules.fryReady = 4.5;

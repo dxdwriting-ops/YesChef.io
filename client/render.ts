@@ -97,6 +97,7 @@ export class PixelRenderer {
   private readonly post: THREE.ShaderMaterial;
   private readonly postScene = new THREE.Scene();
   private readonly postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private scale = 1; // dynamic resolution: 1 is the quality preset's full size
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -136,6 +137,18 @@ export class PixelRenderer {
     return this.quality;
   }
 
+  get resolutionScale() {
+    return this.scale;
+  }
+
+  /** Render at a fraction of the preset's resolution (auto performance). */
+  setScale(s: number) {
+    const next = Math.min(1, Math.max(0.5, Math.round(s * 20) / 20));
+    if (next === this.scale) return;
+    this.scale = next;
+    this.resize();
+  }
+
   /** Switch quality; shadows need every material recompiled, so the scene is passed in. */
   setQuality(q: Quality, scene: THREE.Scene) {
     this.quality = q;
@@ -153,11 +166,12 @@ export class PixelRenderer {
     const ih = window.innerHeight;
     // Retro: chunky pixels. Sharp: twice the detail. HD: close to native, smoother colour steps.
     const h = Math.round(
-      this.quality === "retro"
+      this.scale *
+      (this.quality === "retro"
         ? Math.min(300, Math.max(200, ih / 3.2))
         : this.quality === "sharp"
           ? Math.min(540, Math.max(360, ih / 1.8))
-          : Math.min(1080, Math.max(540, ih * 0.9)),
+          : Math.min(1080, Math.max(540, ih * 0.9))),
     );
     this.post.uniforms.levels.value = { retro: 8, sharp: 11, hd: 18 }[this.quality];
     const w = Math.max(1, Math.round(h * aspect));

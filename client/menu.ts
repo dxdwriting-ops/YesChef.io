@@ -206,7 +206,9 @@ export function initMenu(profile: Profile, onPlay: (req: PlayRequest) => void) {
     if (chId) {
       const c = challenges().find((x) => x.id === chId)!;
       const [one, two, three] = c.rules.stars ?? TIERS[c.tier].stars;
-      return brief({ mode: "challenge", challenge: chId }, "challenge", "Challenge", c.name, c.blurb, [`★ ${one}  ★★ ${two}  ★★★ ${three}`]);
+      return brief({ mode: "challenge", challenge: chId }, "challenge", "Challenge", c.name, c.blurb, [
+        `Points per ticket for stars: ★ ${one}  ★★ ${two}  ★★★ ${three}`,
+      ]);
     }
 
     const tab = t.closest<HTMLElement>("[data-tab]")?.dataset.tab as ItemKind | undefined;

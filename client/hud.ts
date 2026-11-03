@@ -64,6 +64,8 @@ export class Hud {
   peeking = false;
   flipAfter = 0; // from this room's rules
   lobbyText = "";
+  selected = 0; // active hand slot (what Trash throws away)
+  slotKeys: string[] = ["1", "2", "3", "4"];
 
   constructor(onStart: () => void, onTrain: () => void) {
     $("start-service").addEventListener("click", onStart);
@@ -108,8 +110,10 @@ export class Hud {
     const tier = TIERS[state.tier as TierId] ?? TIERS.foodtruck;
     const service = state.phase === "service";
     $("hud").classList.toggle("in-service", service);
-    setText($("stat-time"), state.phase === "training" ? "Train" : clock(state.timeLeft));
-    $("stat-time").classList.toggle("urgent", service && state.timeLeft < 30);
+    // No clock: the shift lasts as many orders as the night brings. Last call tells you it's nearly over.
+    setText($("stat-time-label"), state.lastCall ? "Last call!" : "Served");
+    setText($("stat-time"), state.phase === "training" ? "Train" : String(state.served));
+    $("stat-time").classList.toggle("urgent", service && state.lastCall);
     setText($("stat-score"), String(state.score));
     setHTML(
       $("stat-strikes"),
@@ -142,16 +146,7 @@ export class Hud {
     setHTML($("lobby-crew"), crew.join(""));
 
     const mine = state.players.get(me);
-    const held = $("held");
-    if (mine && isItem(mine.holding)) {
-      held.hidden = false;
-      const img = held.querySelector("img")!;
-      const src = iconURL(mine.holding);
-      if (img.getAttribute("src") !== src) img.src = src;
-      setText(held.querySelector("span")!, ITEM_NAMES[mine.holding]);
-    } else {
-      held.hidden = true;
-    }
+    if (mine) this.renderHands(mine.hands, mine.slots);
 
     $("lobby").hidden = state.phase !== "lobby";
     setText($("lobby-tier"), this.lobbyText || `${tier.name}: ${tier.blurb}`);
@@ -162,8 +157,23 @@ export class Hud {
       setText($("results-served"), String(state.served));
       setText($("results-missed"), String(state.missed));
       setText($("results-combo"), `x${state.bestCombo}`);
+      setText($("results-time"), clock(state.elapsed));
       setText($("results-title"), ["Rough night", "Not bad, crew", "Great service!", "Chef's kiss!"][state.stars]);
     }
+  }
+
+  // The hotbar: one box per hand slot, the selected one raised. Rebuilt only when what you hold changes.
+  private renderHands(hands: Iterable<string>, slots: number) {
+    const items = [...hands];
+    if (this.selected >= slots) this.selected = slots - 1;
+    const sel = Math.min(this.selected, Math.max(0, items.length - 1));
+    const html = Array.from({ length: slots }, (_, i) => {
+      const item = items[i];
+      const pic = isItem(item) ? `<img src="${iconURL(item)}" alt="" title="${ITEM_NAMES[item]}">` : "";
+      return `<span class="slot ${item ? "full" : ""} ${i === sel && item ? "sel" : ""}"><kbd>${esc(this.slotKeys[i] ?? "")}</kbd>${pic}</span>`;
+    }).join("");
+    const label = isItem(items[sel]) ? ITEM_NAMES[items[sel] as keyof typeof ITEM_NAMES] : items.length ? "" : "Empty hands";
+    setHTML($("hands"), `${html}<b>${esc(label)}</b>`);
   }
 
   private renderTickets(state: KitchenView, flipAfter: number) {

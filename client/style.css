@@ -39,12 +39,19 @@ body {
   height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
 }
 
-#game:active {
+/* Each look mode gets a cursor that says how it works. */
+#game[data-look="hold"] {
+  cursor: grab;
+}
+#game.dragging {
   cursor: grabbing;
+}
+#game[data-look="lock"] {
+  cursor: crosshair;
 }
 
 img {
@@ -1269,23 +1276,87 @@ button.row:disabled {
   border: 3px solid var(--ink);
 }
 
-#held {
+/* Hand slots: a hotbar along the bottom right. */
+#hands {
   position: absolute;
   right: 16px;
   bottom: 16px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px 8px 8px;
-  background: var(--paper);
-  color: var(--ink);
+  align-items: flex-end;
+  gap: 6px;
+}
+
+#hands b {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  white-space: nowrap;
+  font-size: 12px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+#hands .slot,
+.mg-basket .slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  background: rgba(255, 244, 220, 0.35);
   border: 3px solid var(--ink);
   box-shadow: 0 var(--px) 0 var(--ink);
 }
 
-#held img {
-  width: 64px;
-  height: 64px;
+#hands .slot.full,
+.mg-basket .slot.full {
+  background: var(--paper);
+}
+
+#hands .slot.sel {
+  transform: translateY(-8px);
+  background: var(--mustard);
+  outline: 3px solid var(--paper);
+}
+
+#hands .slot img,
+.mg-basket .slot img {
+  width: 48px;
+  height: 48px;
+}
+
+#hands .slot kbd {
+  position: absolute;
+  left: -6px;
+  top: -10px;
+  font-size: 10px;
+  padding: 0 3px;
+}
+
+#fps {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: rgba(26, 18, 22, 0.8);
+  color: #9be27a;
+}
+
+.mg-basket {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mg-basket .slot {
+  width: 52px;
+  height: 52px;
+}
+
+.mg-basket small {
+  margin-left: 6px;
 }
 
 #toasts {
@@ -1505,6 +1576,11 @@ button.row:disabled {
   background: var(--paper-2);
 }
 
+/* The knife and fill bars move with transforms, so animating them never triggers layout. */
+.mg-track {
+  container-type: inline-size;
+}
+
 .mg-mark {
   position: absolute;
   top: 0;
@@ -1524,9 +1600,11 @@ button.row:disabled {
   position: absolute;
   top: -8px;
   bottom: -8px;
+  left: 0;
   width: 6px;
   margin-left: -3px;
   background: #e6edf2;
+  will-change: transform;
   border: 2px solid var(--ink);
 }
 
@@ -1555,7 +1633,9 @@ button.row:disabled {
   left: 0;
   top: 6px;
   bottom: 6px;
-  width: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
   background: var(--tomato);
   border-right: 3px solid var(--ink);
 }
@@ -1683,9 +1763,13 @@ button.row:disabled {
   .pings-help {
     display: none;
   }
-  #held img {
-    width: 40px;
-    height: 40px;
+  #hands .slot {
+    width: 46px;
+    height: 46px;
+  }
+  #hands .slot img {
+    width: 34px;
+    height: 34px;
   }
   #guide {
     bottom: 10px;
@@ -1721,5 +1805,124 @@ button.row:disabled {
   .mg-big {
     width: 64px;
     height: 64px;
+  }
+}
+
+/* ---------- Pause and settings ---------- */
+
+#pause .btn,
+#settings > .panel > .btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+#pause,
+#settings {
+  z-index: 20;
+}
+
+#settings {
+  z-index: 21;
+  background: rgba(26, 18, 22, 0.75);
+}
+
+.settings-panel {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.settings-body {
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.settings-body h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+.settings-body h3 small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seg button,
+.key-row button {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 3px solid var(--ink);
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--mustard);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.set-row input[type="range"] {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  accent-color: var(--tomato);
+}
+
+.set-row.check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--tomato);
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 4px 16px;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.key-row button {
+  min-width: 86px;
+}
+
+.key-row button.custom {
+  background: #e8f3d8;
+}
+
+.key-row button.listening {
+  background: var(--tomato);
+  color: var(--paper);
+  animation: blink 0.8s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.6;
   }
 }

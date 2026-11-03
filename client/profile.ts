@@ -139,7 +139,7 @@ export function has(p: Profile, id: string) {
 }
 
 export function perksOf(p: Profile): Perks {
-  return { fryer: has(p, "fryer"), cart: has(p, "cart"), printer: has(p, "printer") };
+  return { fryer: has(p, "fryer"), cart: has(p, "cart"), printer: has(p, "printer"), tray: has(p, "tray") };
 }
 
 // ----- Daily login streak and quests -----

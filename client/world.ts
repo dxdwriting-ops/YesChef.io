@@ -1,6 +1,7 @@
 // The kitchen: textured geometry built from a layout, decor, lights, and live station visuals.
 import * as THREE from "three";
-import { isItem, type Facing, type RecipeId, type StationDef } from "../shared/game";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { fryTimes, isItem, type Facing, type RecipeId, type StationDef } from "../shared/game";
 import type { Box2, Layout } from "../shared/layouts";
 import { itemSprite, labelSprite, setIcon } from "./icons";
 import { SPRITE_LAYER, toon } from "./render";
@@ -32,6 +33,30 @@ function mat(key: TexKey, tint = "#ffffff"): THREE.Material {
     materials.set(id, m);
   }
   return m;
+}
+
+/** Mark a mesh that moves, recolours or hides at runtime, so optimize() leaves it alone. */
+function dynamic<T extends THREE.Object3D>(o: T): T {
+  o.userData.dynamic = true;
+  return o;
+}
+
+// Materials that look identical can share one merged mesh.
+function materialKey(m: THREE.Material): string {
+  const t = m as THREE.MeshToonMaterial & THREE.MeshBasicMaterial;
+  if (!(m instanceof THREE.MeshToonMaterial || m instanceof THREE.MeshBasicMaterial)) return m.uuid;
+  const emissive = m instanceof THREE.MeshToonMaterial ? `${m.emissive.getHexString()}:${m.emissiveIntensity}` : "";
+  return [m.type, t.color.getHexString(), t.map?.uuid ?? "", m.side, m.transparent, m.alphaTest, t.wireframe, m.opacity, emissive].join("|");
+}
+
+/** A copy of one material group of a non-indexed geometry, keeping only the attributes every mesh shares. */
+function slice(geo: THREE.BufferGeometry, start: number, count: number): THREE.BufferGeometry {
+  const out = new THREE.BufferGeometry();
+  for (const name of ["position", "normal", "uv"]) {
+    const a = geo.getAttribute(name) as THREE.BufferAttribute;
+    out.setAttribute(name, new THREE.BufferAttribute(a.array.slice(start * a.itemSize, (start + count) * a.itemSize), a.itemSize));
+  }
+  return out;
 }
 
 function basic(color: THREE.ColorRepresentation) {
@@ -142,7 +167,7 @@ export class KitchenWorld {
     });
 
     // Guide arrow: bounces over the next station the helper wants you at.
-    this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 4), basic("#9a7bff"));
+    this.arrow = dynamic(new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 4), basic("#9a7bff")));
     this.arrow.rotation.x = Math.PI;
     this.arrow.visible = false;
     this.scene.add(this.arrow);
@@ -277,7 +302,7 @@ export class KitchenWorld {
         g.add(tbox(W - 0.12, 0.04, D - 0.15, 0, h + 0.02, 0, mat("grate")));
         const bars: THREE.Mesh[] = [];
         for (let i = 0; i < 5; i++) {
-          const bar = tbox(W - 0.3, 0.012, 0.03, 0, h + 0.045, -0.3 + i * 0.15, basic("#ff7a2e"));
+          const bar = dynamic(tbox(W - 0.3, 0.012, 0.03, 0, h + 0.045, -0.3 + i * 0.15, basic("#ff7a2e")));
           bars.push(bar);
           g.add(bar);
         }
@@ -301,8 +326,8 @@ export class KitchenWorld {
           g.add(tbox(0.4, 0.14, 0.32, s * 0.27, h + 0.1, 0.05, toon("#c9cfd6", { wireframe: true })));
           g.add(tbox(0.04, 0.04, 0.3, s * 0.27, h + 0.18, 0.36, toon("#1a1216")));
         }
-        const bg = tbox(1.0, 0.09, 0.02, 0, h + 0.55, 0.2, basic("#2a1f24"));
-        const bar = tbox(1.0, 0.09, 0.03, 0, h + 0.55, 0.21, basic("#5fd35a"));
+        const bg = dynamic(tbox(1.0, 0.09, 0.02, 0, h + 0.55, 0.2, basic("#2a1f24")));
+        const bar = dynamic(tbox(1.0, 0.09, 0.03, 0, h + 0.55, 0.21, basic("#5fd35a")));
         bg.visible = bar.visible = false;
         g.add(bg, bar);
         this.fryers.push({ def, bar, bg });
@@ -311,7 +336,7 @@ export class KitchenWorld {
       }
       case "pass": {
         g.add(tbox(W, h, D, 0, h / 2, 0, counterFaces()));
-        this.heatLamp = tbox(W - 0.4, 0.08, 0.22, 0, 1.95, 0.1, basic("#ff8a3a"));
+        this.heatLamp = dynamic(tbox(W - 0.4, 0.08, 0.22, 0, 1.95, 0.1, basic("#ff8a3a")));
         g.add(this.heatLamp);
         const lamp = new THREE.PointLight("#ff9a4a", 2.2, 3, 1.5);
         lamp.position.set(0, 1.7, 0.2);
@@ -326,7 +351,7 @@ export class KitchenWorld {
         // Ticket rail with paper tickets clipped on.
         g.add(tbox(W - 0.2, 0.04, 0.04, 0, 1.62, 0.48, mat("steelDark")));
         for (let i = 0; i < 8; i++) {
-          const paper = plane(0.2, 0.3, toon("#fff4dc"));
+          const paper = dynamic(plane(0.2, 0.3, toon("#fff4dc")));
           paper.position.set(-W / 2 + 0.35 + i * ((W - 0.7) / 7), 1.44, 0.5);
           paper.visible = false;
           this.ticketPapers.push(paper);
@@ -352,9 +377,9 @@ export class KitchenWorld {
         g.add(tbox(0.05, 0.05, 0.3, -W / 2 + 0.6, h + 0.43, -D / 2 + 0.28, mat("steel")));
         const plateGeo = new THREE.CylinderGeometry(0.16, 0.13, 0.04, 10);
         for (let i = 0; i < 8; i++) {
-          const clean = new THREE.Mesh(plateGeo, toon("#f2f4f7"));
+          const clean = dynamic(new THREE.Mesh(plateGeo, toon("#f2f4f7")));
           clean.position.set(W / 2 - 0.3, h + 0.04 + i * 0.045, 0);
-          const dirty = new THREE.Mesh(plateGeo, toon("#b49a6a"));
+          const dirty = dynamic(new THREE.Mesh(plateGeo, toon("#b49a6a")));
           dirty.position.set(W / 2 - 0.75, h + 0.04 + i * 0.045, 0.05);
           this.cleanStack.push(clean);
           this.dirtyStack.push(dirty);
@@ -538,10 +563,52 @@ export class KitchenWorld {
       g.add(tbox(0.05, 0.05, 0.02, -0.06, pass.h + 0.3, 0.29, toon("#1a1216")));
       g.add(tbox(0.05, 0.05, 0.02, 0.06, pass.h + 0.3, 0.29, toon("#1a1216")));
       g.add(tbox(0.12, 0.04, 0.17, 0, pass.h + 0.15, 0.2, toon("#e04f3f"))); // collar
-      this.catPaw = tbox(0.06, 0.14, 0.06, 0.12, pass.h + 0.32, 0.22, white);
+      this.catPaw = dynamic(tbox(0.06, 0.14, 0.06, 0.12, pass.h + 0.32, 0.22, white));
       g.add(this.catPaw);
       add(g);
     }
+  }
+
+  /**
+   * Merge every static mesh that shares a look into one draw call. The kitchen is hundreds of little
+   * boxes; drawn one by one they cost a draw call each in the colour, normal and shadow passes.
+   * Call once, after decor is placed.
+   */
+  optimize() {
+    this.scene.updateMatrixWorld(true);
+    const buckets = new Map<string, { material: THREE.Material; geos: THREE.BufferGeometry[] }>();
+    const merged: THREE.Mesh[] = [];
+    this.scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData.dynamic || !mesh.visible) return;
+      const src = mesh.geometry;
+      if (!src.getAttribute("normal") || !src.getAttribute("uv")) return;
+      const flat = src.index ? src.toNonIndexed() : src.clone();
+      flat.applyMatrix4(mesh.matrixWorld);
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const groups = Array.isArray(mesh.material) && src.groups.length ? src.groups : [{ start: 0, count: flat.getAttribute("position").count, materialIndex: 0 }];
+      for (const g of groups) {
+        const material = mats[g.materialIndex ?? 0];
+        const key = materialKey(material);
+        let b = buckets.get(key);
+        if (!b) buckets.set(key, (b = { material, geos: [] }));
+        b.geos.push(slice(flat, g.start, g.count));
+      }
+      flat.dispose();
+      merged.push(mesh);
+    });
+    for (const mesh of merged) mesh.removeFromParent();
+    for (const { material, geos } of buckets.values()) {
+      const geo = mergeGeometries(geos, false);
+      geos.forEach((g) => g.dispose());
+      if (!geo) continue;
+      const mesh = new THREE.Mesh(geo, material);
+      const unlit = material instanceof THREE.MeshBasicMaterial;
+      mesh.castShadow = mesh.receiveShadow = !unlit;
+      mesh.matrixAutoUpdate = false;
+      this.scene.add(mesh);
+    }
+    return { before: merged.length, after: buckets.size };
   }
 
   /** Grow the label of the station you're looking at. */
@@ -566,11 +633,12 @@ export class KitchenWorld {
       f.bar.visible = f.bg.visible = cooking;
       if (!st || !cooking) continue;
       this.busyFryers.add(f.def.id);
-      const t = Math.min(1, st.progress / this.fry.burnt);
+      const times = fryTimes(this.fry.ready, this.fry.burnt, st.item);
+      const t = Math.min(1, st.progress / times.burnt);
       f.bar.scale.x = Math.max(0.02, t);
       f.bar.position.x = -0.5 + t * 0.5;
       (f.bar.material as THREE.MeshBasicMaterial).color.set(
-        st.progress < this.fry.ready ? "#e0b23f" : st.progress <= this.fry.burnt ? "#5fd35a" : "#e04f3f",
+        st.progress < times.ready ? "#e0b23f" : st.progress <= times.burnt ? "#5fd35a" : "#e04f3f",
       );
     }
     this.busyGrills.clear();

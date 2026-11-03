@@ -1,23 +1,27 @@
 ﻿import { Room, type Client } from "colyseus";
 import {
-  BURNT,
   CHEF_COLORS,
   COMBO_WINDOW,
+  FRY,
+  GRILL,
   INTERACT_RANGE,
   MODS,
   PINGS,
-  PREP_RESULT,
+  PREP,
   RECIPES,
+  RUSH_AT,
   RUSH_LENGTH,
   TRAINING_ORDERS,
-  WALKIN_ITEMS,
   WARMUP_SHARE,
   WARMUP_SLOWDOWN,
   applyMods,
   comboMultiplier,
   distanceToStation,
+  fryTimes,
   isItem,
   remainingNeeds,
+  starsFor,
+  walkinItems,
   type ItemId,
   type RecipeId,
   type StationDef,
@@ -39,6 +43,7 @@ interface UseMessage {
   station?: string;
   action?: string;
   item?: string;
+  items?: unknown;
   quality?: number;
   result?: string;
 }
@@ -59,16 +64,21 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
   private rules!: Rules;
   private layout!: Layout;
   private stationById = new Map<string, StationDef>();
+  private walkin: ItemId[] = [];
   private nextOrderIn = 0;
   private nextTicketId = 1;
   private platesComingBack: number[] = [];
   private rushDone = false;
   private trainingStep = 0;
+  // The night's length in tickets. Server-only on purpose: nobody knows when the last order is coming.
+  private ordersTotal = 0;
+  private ordersSpawned = 0;
 
   onCreate(options: JoinOptions) {
     this.rules = rulesFor(options ?? {});
     this.layout = LAYOUTS[this.rules.layout];
     this.stationById = new Map(this.layout.stations.map((s) => [s.id, s]));
+    this.walkin = walkinItems(this.rules.recipes);
     // Career, challenge and training are solo runs in a private kitchen.
     if (this.rules.mode !== "quick") this.maxClients = 1;
 
@@ -120,6 +130,11 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
       if (this.state.phase === "lobby" || this.state.phase === "results") this.startTraining();
     });
 
+    // Solo kitchens stop the world while you're in the pause menu. A shared kitchen never stops.
+    this.onMessage("pause", (_client, paused: unknown) => {
+      if (this.rules.mode !== "quick") this.state.paused = paused === true;
+    });
+
     this.onMessage("ping", (client, index: number) => {
       const p = this.state.players.get(client.sessionId);
       const text = PINGS[index];
@@ -138,6 +153,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     if (typeof options?.skin === "number" && options.skin >= 0 && options.skin < SKIN_TONES.length) p.skin = Math.floor(options.skin);
     if (shopItem(options?.hat ?? "")?.kind === "hat") p.hat = options.hat!;
     if (shopItem(options?.jacket ?? "")?.kind === "jacket") p.jacket = options.jacket!;
+    // Hand slots are personal (the Sheet Tray), so each chef brings their own.
+    p.slots = rulesFor({ ...options, mode: this.rules.mode }).slots;
     const n = this.state.players.size;
     p.x = this.layout.spawn.x - 0.6 + (n % 3) * 0.6;
     p.z = this.layout.spawn.z + Math.floor(n / 3) * 0.6;
@@ -177,15 +194,43 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     });
   }
 
-  private hold(p: PlayerState, item: ItemId | "", quality = 1) {
-    p.holding = item;
-    p.holdingQ = quality;
+  // ----- Hands -----
+
+  private give(p: PlayerState, item: ItemId, quality = 1): boolean {
+    if (p.hands.length >= p.slots) return false;
+    p.hands.push(item);
+    p.handsQ.push(quality);
+    return true;
+  }
+
+  /** Take one of `item` out of the chef's hands; returns its quality, or null if they aren't holding one. */
+  private takeItem(p: PlayerState, item: string): number | null {
+    const i = p.hands.indexOf(item);
+    if (i < 0) return null;
+    const q = p.handsQ[i] ?? 1;
+    p.hands.splice(i, 1);
+    p.handsQ.splice(i, 1);
+    return q;
+  }
+
+  /** Swap a held item for what it becomes, in the same slot so the hotbar doesn't shuffle. */
+  private transform(p: PlayerState, item: string, result: ItemId, quality: number): boolean {
+    const i = p.hands.indexOf(item);
+    if (i < 0) return false;
+    p.hands[i] = result;
+    p.handsQ[i] = quality;
+    return true;
+  }
+
+  private clearHands(p: PlayerState) {
+    p.hands.splice(0, p.hands.length);
+    p.handsQ.splice(0, p.handsQ.length);
   }
 
   private handleUse(client: Client, msg: UseMessage) {
     const p = this.state.players.get(client.sessionId);
     const def = msg?.station ? this.stationById.get(msg.station) : undefined;
-    if (!p || !def) return;
+    if (!p || !def || this.state.paused) return;
     if (!this.inRange(p, def)) {
       client.send("toast", "Get closer to the station.");
       return;
@@ -196,56 +241,71 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
       return;
     }
     const toast = (text: string) => client.send("toast", text);
+    const held = (item: unknown): item is ItemId => isItem(item) && p.hands.includes(item);
 
     switch (def.kind) {
       case "walkin": {
-        if (msg.action !== "take" || !isItem(msg.item) || !WALKIN_ITEMS.includes(msg.item)) return;
-        if (p.holding) return toast("Your hands are full.");
-        this.hold(p, msg.item);
+        // One trip can fill every free slot.
+        if (msg.action !== "take" || !Array.isArray(msg.items)) return;
+        for (const item of msg.items.slice(0, p.slots)) {
+          if (!isItem(item) || !this.walkin.includes(item)) continue;
+          if (!this.give(p, item)) return toast("Your hands are full.");
+        }
         return;
       }
       case "prep": {
         if (msg.action !== "chop") return;
-        const result = isItem(p.holding) ? PREP_RESULT[p.holding] : undefined;
-        if (!result) return toast("Bring lettuce, a tomato or a potato to prep.");
-        this.hold(p, result, (p.holdingQ + clamp01(msg.quality)) / 2);
+        const step = held(msg.item) ? PREP[msg.item] : undefined;
+        if (!step) return toast("Nothing here to prep. Bring raw ingredients.");
+        const q = p.handsQ[p.hands.indexOf(msg.item as string)] ?? 1;
+        this.transform(p, msg.item as string, step.result, (q + clamp01(msg.quality)) / 2);
         return;
       }
       case "grill": {
         if (msg.action !== "sear") return;
-        if (p.holding !== "patty_raw") return toast("The grill needs a raw patty.");
-        if (msg.result === "cooked") this.hold(p, "patty_cooked", clamp01(msg.quality));
-        else if (msg.result === "burnt") this.hold(p, "patty_burnt", 0);
+        const step = held(msg.item) ? GRILL[msg.item] : undefined;
+        if (!step) return toast("The grill takes raw patties and buns.");
+        if (msg.result === "cooked") this.transform(p, msg.item as string, step.result, clamp01(msg.quality));
+        else if (msg.result === "burnt") this.transform(p, msg.item as string, "burnt", 0);
         return;
       }
       case "fryer": {
         if (msg.action !== "fry") return;
         if (!station.item) {
-          if (p.holding !== "potato_cut") return toast("The fryer takes cut potatoes.");
-          station.item = "potato_cut";
+          const item = held(msg.item) && FRY[msg.item] ? msg.item : p.hands.find((h) => isItem(h) && !!FRY[h]);
+          if (!item) return toast("The fryer takes cut potatoes, raw onion rings and breaded chicken.");
+          this.takeItem(p, item);
+          station.item = item;
           station.progress = 0;
-          this.hold(p, "");
           return;
         }
-        if (p.holding) return toast("Free your hands to pull the basket.");
-        if (station.progress < this.rules.fryReady) return toast("Not golden yet...");
-        const burnt = station.progress > this.rules.fryBurnt;
-        const ideal = (this.rules.fryReady + this.rules.fryBurnt) / 2;
-        const q = burnt ? 0 : 1 - Math.abs(station.progress - ideal) / (this.rules.fryBurnt - this.rules.fryReady);
-        this.hold(p, burnt ? "fries_burnt" : "fries", q);
+        const t = fryTimes(this.rules.fryReady, this.rules.fryBurnt, station.item);
+        if (station.progress < t.ready) return toast("Not golden yet...");
+        if (p.hands.length >= p.slots) return toast("Free a hand to pull the basket.");
+        const burnt = station.progress > t.burnt;
+        const ideal = (t.ready + t.burnt) / 2;
+        const q = burnt ? 0 : 1 - Math.abs(station.progress - ideal) / (t.burnt - t.ready);
+        this.give(p, burnt ? "burnt" : FRY[station.item as ItemId]!.result, q);
         station.item = "";
         station.progress = 0;
         return;
       }
       case "pass": {
+        // Send everything the rail needs in one go, oldest ticket first.
         if (msg.action !== "serve") return;
-        if (!p.holding) return toast("Bring finished food to the pass.");
-        if (BURNT.includes(p.holding as ItemId)) return toast("The expo sends it back. Burnt!");
-        const ticket = this.ticketsInOrder().find((tk) => remainingNeeds(tk.need, tk.have).includes(p.holding));
-        if (!ticket) return toast("No ticket needs that right now.");
-        ticket.have.push(p.holding);
-        ticket.qSum += p.holdingQ;
-        this.hold(p, "");
+        if (!p.hands.length) return toast("Bring finished food to the pass.");
+        const tickets = this.ticketsInOrder();
+        let sent = 0;
+        for (const item of [...p.hands]) {
+          if (item === "burnt") continue;
+          const ticket = tickets.find((tk) => remainingNeeds(tk.need, tk.have).includes(item));
+          if (!ticket) continue;
+          const q = this.takeItem(p, item) ?? 1;
+          ticket.have.push(item);
+          ticket.qSum += q;
+          sent++;
+        }
+        if (sent === 0) toast(p.hands.includes("burnt") ? "The expo sends it back. Burnt!" : "No ticket needs that right now.");
         return;
       }
       case "dishpit": {
@@ -257,8 +317,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
       }
       case "trash": {
         if (msg.action !== "toss") return;
-        if (!p.holding) return toast("Nothing to toss.");
-        this.hold(p, "");
+        if (!p.hands.length) return toast("Nothing to toss.");
+        this.takeItem(p, held(msg.item) ? msg.item : p.hands[p.hands.length - 1]!);
         return;
       }
     }
@@ -275,13 +335,16 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
       st.item = "";
       st.progress = 0;
     });
-    s.players.forEach((p) => this.hold(p, ""));
+    s.players.forEach((p) => this.clearHands(p));
     s.cleanPlates = this.rules.startPlates;
     s.dirtyPlates = 0;
     s.combo = 0;
     s.comboTime = 0;
     s.rushLeft = 0;
     s.queueLeft = 0;
+    s.elapsed = 0;
+    s.lastCall = false;
+    s.paused = false;
     this.platesComingBack = [];
   }
 
@@ -289,7 +352,6 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     this.resetKitchen();
     const s = this.state;
     s.phase = "training";
-    s.timeLeft = 0;
     s.score = 0;
     this.trainingStep = 0;
     this.spawnTicket(TRAINING_ORDERS[0], true);
@@ -299,7 +361,6 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     const s = this.state;
     this.resetKitchen();
     s.phase = "service";
-    s.timeLeft = this.rules.duration;
     s.score = 0;
     s.served = 0;
     s.missed = 0;
@@ -307,6 +368,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     s.stars = 0;
     s.bestCombo = 0;
     this.rushDone = false;
+    this.ordersTotal = this.rules.orders[Math.floor(Math.random() * this.rules.orders.length)];
+    this.ordersSpawned = 0;
     this.nextOrderIn = 2;
     this.broadcast("toast", `Service! ${this.rules.title} is open.`);
   }
@@ -314,8 +377,9 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
   private endService(reason: string) {
     const s = this.state;
     s.phase = "results";
-    const [one, two, three] = this.rules.stars;
-    s.stars = s.score >= three ? 3 : s.score >= two ? 2 : s.score >= one ? 1 : 0;
+    s.paused = false;
+    // Tickets still on the rail when the kitchen closes early count as walk-outs for the rating.
+    s.stars = starsFor(s.score, Math.max(this.ordersSpawned, s.served + s.missed), this.rules.stars);
     this.broadcast("toast", reason);
   }
 
@@ -331,7 +395,7 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     const needs = applyMods(recipeId, ticket.mods);
     for (const item of needs) ticket.need.push(item);
     // Bigger orders get a little more time.
-    ticket.timeMax = this.rules.ticketTime + Math.max(0, needs.length - 2) * 8;
+    ticket.timeMax = this.rules.ticketTime + Math.max(0, needs.length - 2) * 10;
     ticket.timeLeft = ticket.timeMax;
     this.state.tickets.push(ticket);
     this.broadcast("order", { id: ticket.id, recipe: recipeId, mods: [...ticket.mods] });
@@ -349,12 +413,16 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     return Math.round((base + speedBonus + tip) * comboMultiplier(this.state.combo));
   }
 
+  private cookFryers(dt: number) {
+    this.state.stations.forEach((st) => {
+      if (st.item) st.progress += dt;
+    });
+  }
+
   // Training: no clock, no strikes, plates never run out. Serve each lesson dish to unlock the next.
   private trainingTick(dt: number) {
     const s = this.state;
-    s.stations.forEach((st) => {
-      if (st.item) st.progress += dt;
-    });
+    this.cookFryers(dt);
     const tk = s.tickets[0];
     if (!tk || remainingNeeds(tk.need, tk.have).length > 0) return;
     s.tickets.splice(0, 1);
@@ -382,6 +450,7 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
 
   private tick(dt: number) {
     const s = this.state;
+    if (s.paused) return;
 
     // Stations whose cook walked away are freed for someone else.
     s.stations.forEach((st, id) => {
@@ -398,13 +467,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
     if (s.phase === "lobby" && this.rules.mode === "quick") return this.queueTick(dt);
     if (s.phase !== "service") return;
 
-    s.timeLeft = Math.max(0, s.timeLeft - dt);
-    if (s.timeLeft === 0) return this.endService("Last call! Service is over.");
-
-    // Fryer baskets keep cooking whether anyone is watching or not.
-    s.stations.forEach((st) => {
-      if (st.item) st.progress += dt;
-    });
+    s.elapsed += dt;
+    this.cookFryers(dt); // baskets keep cooking whether anyone is watching or not
 
     this.platesComingBack = this.platesComingBack
       .map((t) => t - dt)
@@ -420,8 +484,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
       if (s.comboTime === 0) s.combo = 0;
     }
 
-    // Rush hour: just past halfway, tickets come in twice as fast for a while.
-    if (!this.rushDone && s.timeLeft < this.rules.duration * 0.45) {
+    // Rush hour: about halfway through the night, tickets come in twice as fast for a while.
+    if (!this.rushDone && this.ordersSpawned >= Math.ceil(this.ordersTotal * RUSH_AT)) {
       this.rushDone = true;
       s.rushLeft = RUSH_LENGTH;
       this.nextOrderIn = Math.min(this.nextOrderIn, 1);
@@ -432,10 +496,15 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
 
     this.nextOrderIn -= dt;
     const maxTickets = this.rules.maxTickets + (rushing ? 1 : 0);
-    if (this.nextOrderIn <= 0 && s.tickets.length < maxTickets) {
+    if (this.ordersSpawned < this.ordersTotal && this.nextOrderIn <= 0 && s.tickets.length < maxTickets) {
       this.spawnTicket();
-      const warmingUp = this.rules.duration - s.timeLeft < this.rules.duration * WARMUP_SHARE;
+      this.ordersSpawned++;
+      const warmingUp = this.ordersSpawned < this.ordersTotal * WARMUP_SHARE;
       this.nextOrderIn = randomBetween(this.rules.orderEvery) * (rushing ? 0.5 : warmingUp ? WARMUP_SLOWDOWN : 1);
+      if (this.ordersSpawned === this.ordersTotal) {
+        s.lastCall = true;
+        this.broadcast("lastcall", {});
+      }
     }
 
     for (let i = s.tickets.length - 1; i >= 0; i--) {
@@ -465,5 +534,8 @@ export class KitchenRoom extends Room<{ state: InstanceType<typeof KitchenState>
         if (s.strikes >= s.maxStrikes) return this.endService("Too many walk-outs. Kitchen closed!");
       }
     }
+
+    // The shift is over once the last ticket has been and gone.
+    if (s.lastCall && s.tickets.length === 0) this.endService("That's the last ticket. Great shift, chefs!");
   }
 }

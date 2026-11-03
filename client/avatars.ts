@@ -94,7 +94,8 @@ export class Avatars {
       }
       a.target.set(p.x, 0, p.z);
       a.yaw = p.yaw;
-      setIcon(a.held, isItem(p.holding) ? p.holding : null);
+      const first = p.hands[0];
+      setIcon(a.held, isItem(first) ? first : null);
     });
     for (const [id, a] of this.avatars) {
       if (!seen.has(id)) {

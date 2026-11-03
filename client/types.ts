@@ -19,8 +19,9 @@ export interface PlayerView {
   x: number;
   z: number;
   yaw: number;
-  holding: string;
-  holdingQ: number;
+  hands: ListLike<string>;
+  handsQ: ListLike<number>;
+  slots: number;
   station: string;
 }
 
@@ -47,7 +48,9 @@ export interface KitchenView {
   mode: string;
   title: string;
   queueLeft: number;
-  timeLeft: number;
+  elapsed: number;
+  lastCall: boolean;
+  paused: boolean;
   score: number;
   served: number;
   missed: number;

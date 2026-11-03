@@ -1,18 +1,23 @@
 // Station mini-games: short, readable skill checks built on real kitchen technique.
-import { ITEM_NAMES, PREP_RESULT, WALKIN_ITEMS, isItem, type ItemId } from "../shared/game";
+// Each one works with the bound "mini-game action" key or the mouse.
+import { GRILL, ITEM_NAMES, PREP, type ItemId } from "../shared/game";
 import { iconURL } from "./icons";
+import { keyName, type Settings } from "./settings";
 import type { Sfx } from "./sfx";
 
 export type MinigameResult =
-  | { action: "take"; item: ItemId }
-  | { action: "chop"; quality: number }
-  | { action: "sear"; result: "cooked" | "burnt"; quality: number }
+  | { action: "take"; items: ItemId[] }
+  | { action: "chop"; item: ItemId; quality: number }
+  | { action: "sear"; item: ItemId; result: "cooked" | "burnt"; quality: number }
   | { action: "scrub" };
 
 interface Context {
-  holding: string;
+  item?: ItemId; // what you're prepping or grilling
+  walkin?: ItemId[]; // what this kitchen's walk-in stocks
+  free?: number; // empty hand slots
   grillWindow: number;
   prepBonus?: number; // Santoku Knife widens the cut marks
+  keys: Settings["keys"];
 }
 
 type Finish = (result: MinigameResult | null, message?: string) => void;
@@ -20,6 +25,7 @@ type Finish = (result: MinigameResult | null, message?: string) => void;
 export class Minigames {
   private readonly root: HTMLElement;
   private cleanup: (() => void) | null = null;
+  private stepAway: (() => void) | null = null;
   active = false;
 
   constructor(
@@ -29,29 +35,41 @@ export class Minigames {
     this.root = document.getElementById("minigame")!;
   }
 
+  /** Leave the current mini-game (Esc, or the pause menu opening). */
+  close() {
+    this.stepAway?.();
+  }
+
   open(kind: string, ctx: Context): Promise<MinigameResult | null> {
     return new Promise((resolve) => {
       this.active = true;
       this.root.hidden = false;
       const finish: Finish = (result, message) => {
-        if (result) this.sfx.success();
+        if (result && result.action !== "take") this.sfx.success();
         else if (message) this.sfx.fail();
         this.cleanup?.();
         this.cleanup = null;
+        this.stepAway = null;
         this.root.hidden = true;
         this.root.innerHTML = "";
         this.active = false;
         if (message) this.onMessage(message);
         resolve(result);
       };
+      let leave = () => finish(null);
       const onEsc = (e: KeyboardEvent) => {
-        if (e.code === "Escape") finish(null);
+        if (e.code === "Escape") {
+          e.preventDefault();
+          leave();
+        }
       };
       window.addEventListener("keydown", onEsc);
-      const stop = this.start(kind, ctx, finish);
+      const started = this.start(kind, ctx, finish);
+      if (started.leave) leave = started.leave;
+      this.stepAway = () => leave();
       this.cleanup = () => {
         window.removeEventListener("keydown", onEsc);
-        stop();
+        started.stop();
       };
     });
   }
@@ -65,64 +83,102 @@ export class Minigames {
       </div>`;
   }
 
-  private start(kind: string, ctx: Context, finish: Finish): () => void {
+  private start(kind: string, ctx: Context, finish: Finish): { stop: () => void; leave?: () => void } {
     switch (kind) {
       case "walkin":
-        return this.walkin(finish);
+        return this.walkin(ctx, finish);
       case "prep":
-        return this.prep(ctx, finish);
+        return { stop: this.prep(ctx, finish) };
       case "grill":
-        return this.grill(ctx, finish);
+        return { stop: this.grill(ctx, finish) };
       case "dishpit":
-        return this.scrub(finish);
+        return { stop: this.scrub(ctx, finish) };
       default:
         finish(null);
-        return () => {};
+        return { stop: () => {} };
     }
   }
 
-  private walkin(finish: Finish) {
-    const cards = WALKIN_ITEMS.map(
-      (id, i) => `<button class="mg-card" data-item="${id}">
+  // Shopping trip: pick up to one item per free hand slot, then close (E, Enter or Esc) or fill up.
+  private walkin(ctx: Context, finish: Finish) {
+    const stock = ctx.walkin ?? [];
+    const free = ctx.free ?? 1;
+    const picked: ItemId[] = [];
+    const cards = stock
+      .map(
+        (id, i) => `<button class="mg-card" data-item="${id}">
         <img src="${iconURL(id)}" alt=""><span>${i + 1}. ${ITEM_NAMES[id]}</span></button>`,
-    ).join("");
-    this.frame("Walk-in fridge", "Pick an ingredient: click it or press 1-5.", `<div class="mg-grid">${cards}</div>`);
+      )
+      .join("");
+    this.frame(
+      "Walk-in fridge",
+      `Pick up to ${free}: click or press 1-${stock.length}. ${keyName(ctx.keys.interact)} or Enter when you're done.`,
+      `<div class="mg-grid">${cards}</div>
+       <div class="mg-basket" id="mg-basket"></div>`,
+    );
+    const basket = this.root.querySelector<HTMLElement>("#mg-basket")!;
+    const draw = () => {
+      basket.innerHTML =
+        Array.from({ length: free }, (_, i) =>
+          picked[i] ? `<span class="slot full"><img src="${iconURL(picked[i])}" alt=""></span>` : `<span class="slot"></span>`,
+        ).join("") + `<small>${picked.length}/${free} in hand</small>`;
+    };
+    let closed = false;
+    const done = () => {
+      if (closed) return;
+      closed = true;
+      finish(picked.length ? { action: "take", items: picked } : null);
+    };
+    const pick = (item: ItemId) => {
+      picked.push(item);
+      this.sfx.pick();
+      draw();
+      if (picked.length >= free) done(); // full: back to the line
+    };
+    draw();
     const onClick = (e: MouseEvent) => {
-      const item = (e.target as HTMLElement).closest<HTMLElement>("[data-item]")?.dataset.item;
-      if (isItem(item)) finish({ action: "take", item });
+      const id = (e.target as HTMLElement).closest<HTMLElement>("[data-item]")?.dataset.item;
+      const item = stock.find((s) => s === id);
+      if (item && picked.length < free) pick(item);
     };
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code === ctx.keys.interact || e.code === "Enter") return done();
       const n = Number(e.key);
-      if (n >= 1 && n <= WALKIN_ITEMS.length) finish({ action: "take", item: WALKIN_ITEMS[n - 1] });
+      if (n >= 1 && n <= stock.length && picked.length < free) pick(stock[n - 1]);
     };
     this.root.addEventListener("click", onClick);
     window.addEventListener("keydown", onKey);
-    return () => {
-      this.root.removeEventListener("click", onClick);
-      window.removeEventListener("keydown", onKey);
+    return {
+      stop: () => {
+        this.root.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKey);
+      },
+      leave: done, // stepping away keeps what you picked
     };
   }
 
-  // Rhythm chop: the knife sweeps across the board once; tap Space on each cut mark.
+  // Rhythm prep: the knife sweeps across the board once; hit the action key on each mark.
   private prep(ctx: Context, finish: Finish) {
-    const result = isItem(ctx.holding) ? PREP_RESULT[ctx.holding] : undefined;
-    if (!isItem(ctx.holding) || !result) {
-      finish(null, "Bring lettuce, a tomato or a potato from the walk-in.");
+    const item = ctx.item;
+    const step = item ? PREP[item] : undefined;
+    if (!item || !step) {
+      finish(null, "Bring raw ingredients from the walk-in.");
       return () => {};
     }
     const marks = [0.2, 0.4, 0.6, 0.8];
     const zone = 0.05 * (ctx.prepBonus ?? 1);
     const hit = new Set<number>();
     let misses = 0;
-    const duration = 2600;
+    const duration = 2400;
     const marksHtml = marks
       .map((m, i) => `<i class="mg-mark" data-i="${i}" style="left:${m * 100}%;width:${zone * 200}%;margin-left:-${zone * 100}%"></i>`)
       .join("");
     this.frame(
-      "Prep: knife work",
-      "Tap Space as the knife crosses each mark.",
-      `<div class="mg-row"><img class="mg-big" src="${iconURL(ctx.holding)}" alt="">
-        <span class="mg-arrow">→</span><img class="mg-big" src="${iconURL(result)}" alt=""></div>
+      `Prep: ${step.verb.toLowerCase()}`,
+      `Press ${keyName(ctx.keys.work)} (or click) as the knife crosses each mark.`,
+      `<div class="mg-row"><img class="mg-big" src="${iconURL(item)}" alt="">
+        <span class="mg-arrow">→</span><img class="mg-big" src="${iconURL(step.result)}" alt=""></div>
        <div class="mg-track">${marksHtml}<b class="mg-knife"></b></div>
        <div class="mg-score">Cuts: <span id="mg-cuts">0</span>/4</div>`,
     );
@@ -133,18 +189,16 @@ export class Minigames {
     const pos = () => Math.min(1, Math.max(0, (performance.now() - t0) / duration));
     const loop = () => {
       const p = pos();
-      knife.style.left = `${p * 100}%`;
+      knife.style.transform = `translateX(${p * 100}cqw)`;
       if (p >= 1) {
         const quality = Math.max(0, (hit.size - misses * 0.5) / marks.length);
-        if (hit.size === 0) finish(null, "Every chop missed. Try again!");
-        else finish({ action: "chop", quality }, hit.size === 4 && misses === 0 ? "Perfect brunoise!" : undefined);
+        if (hit.size === 0) finish(null, "Every cut missed. Try again!");
+        else finish({ action: "chop", item, quality }, hit.size === 4 && misses === 0 ? "Perfect knife work!" : undefined);
         return;
       }
       raf = requestAnimationFrame(loop);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat) return;
-      e.preventDefault();
+    const press = () => {
       if (performance.now() < t0) return; // ignore presses during the count-in
       const p = pos();
       const i = marks.findIndex((m, n) => !hit.has(n) && Math.abs(p - m) <= zone);
@@ -161,98 +215,124 @@ export class Minigames {
         knife.classList.add("miss");
       }
     };
-    t0 = performance.now() + 500; // short count-in
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== ctx.keys.work || e.repeat) return;
+      e.preventDefault();
+      press();
+    };
+    const onPointer = (e: PointerEvent) => {
+      if (e.button === 0) press();
+    };
+    t0 = performance.now() + 450; // short count-in
     raf = requestAnimationFrame(loop);
     window.addEventListener("keydown", onKey);
+    this.root.addEventListener("pointerdown", onPointer);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", onKey);
+      this.root.removeEventListener("pointerdown", onPointer);
     };
   }
 
-  // Sear by feel: hold Space, release in the seared window. Too long and it burns.
+  // Sear or toast by feel: hold the action key (or the mouse), release in the green window. Too long and it burns.
   private grill(ctx: Context, finish: Finish) {
-    if (ctx.holding !== "patty_raw") {
-      finish(null, "The grill needs a raw patty from the walk-in.");
+    const item = ctx.item;
+    const step = item ? GRILL[item] : undefined;
+    if (!item || !step) {
+      finish(null, "The grill takes raw patties and buns.");
       return () => {};
     }
     const center = 0.62;
     const lo = center - ctx.grillWindow / 2;
     const hi = center + ctx.grillWindow / 2;
+    const fillTime = 2.4 / step.speed;
     this.frame(
-      "Grill: smash & sear",
-      "Hold Space to sear. Release in the green zone.",
-      `<div class="mg-row"><img class="mg-big mg-patty" src="${iconURL("patty_raw")}" alt=""></div>
+      `Grill: ${step.verb.toLowerCase()}`,
+      `Hold ${keyName(ctx.keys.work)} (or the mouse). Let go in the green zone.`,
+      `<div class="mg-row"><img class="mg-big mg-patty" src="${iconURL(item)}" alt=""></div>
        <div class="mg-meter"><i class="mg-zone" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></i>
          <i class="mg-burn" style="left:${(hi + 0.12) * 100}%"></i><b class="mg-fill"></b></div>
-       <div class="mg-score" id="mg-doneness">Raw</div>`,
+       <div class="mg-score" id="mg-doneness">${item === "bun" ? "Untoasted" : "Raw"}</div>`,
     );
     const fill = this.root.querySelector<HTMLElement>(".mg-fill")!;
-    const patty = this.root.querySelector<HTMLImageElement>(".mg-patty")!;
+    const pic = this.root.querySelector<HTMLImageElement>(".mg-patty")!;
     const label = this.root.querySelector<HTMLElement>("#mg-doneness")!;
     let v = 0;
-    let shown: ItemId = "patty_raw";
+    let shown: ItemId = item;
     let holding = false;
     let last = performance.now();
     let raf = 0;
     let sizzleAt = 0;
     const release = () => {
+      if (!holding) return;
+      holding = false;
       if (v < lo) {
-        holding = false;
         v = 0;
-        label.textContent = "Still raw. Hold longer!";
+        label.textContent = item === "bun" ? "Still pale. Hold longer!" : "Still raw. Hold longer!";
         return;
       }
-      if (v <= hi) finish({ action: "sear", result: "cooked", quality: 1 - Math.abs(v - center) / (hi - lo) }, "Beautiful crust!");
-      else finish({ action: "sear", result: "burnt", quality: 0 }, "Burnt! Toss it and grab another.");
+      if (v <= hi) finish({ action: "sear", item, result: "cooked", quality: 1 - Math.abs(v - center) / (hi - lo) }, item === "bun" ? "Golden toast!" : "Beautiful crust!");
+      else finish({ action: "sear", item, result: "burnt", quality: 0 }, "Burnt! Toss it and grab another.");
     };
     const loop = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      if (holding) v = Math.min(1, v + dt / 2.4);
+      if (holding) v = Math.min(1, v + dt / fillTime);
       if (holding && now > sizzleAt) {
         this.sfx.sizzle();
         sizzleAt = now + 150;
       }
-      fill.style.width = `${v * 100}%`;
-      const look: ItemId = v < lo ? "patty_raw" : v <= hi + 0.12 ? "patty_cooked" : "patty_burnt";
+      fill.style.transform = `scaleX(${v})`;
+      const look: ItemId = v < lo ? item : v <= hi + 0.12 ? step.result : "burnt";
       if (look !== shown) {
         shown = look;
-        patty.src = iconURL(look);
+        pic.src = iconURL(look);
       }
-      if (holding) label.textContent = v < lo ? "Searing..." : v <= hi ? "Medium! Let go!" : "Smoking!";
-      if (v >= 1) return release();
+      if (holding) label.textContent = v < lo ? (item === "bun" ? "Toasting..." : "Searing...") : v <= hi ? "Now! Let go!" : "Smoking!";
+      if (v >= 1) {
+        holding = true;
+        return release();
+      }
       raf = requestAnimationFrame(loop);
     };
     const down = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
+      if (e.code === ctx.keys.work) {
         e.preventDefault();
         holding = true;
       }
     };
     const up = (e: KeyboardEvent) => {
-      if (e.code === "Space" && holding) release();
+      if (e.code === ctx.keys.work) release();
+    };
+    const pDown = (e: PointerEvent) => {
+      if (e.button === 0) holding = true;
     };
     raf = requestAnimationFrame(loop);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
+    this.root.addEventListener("pointerdown", pDown);
+    window.addEventListener("pointerup", release);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      this.root.removeEventListener("pointerdown", pDown);
+      window.removeEventListener("pointerup", release);
     };
   }
 
-  // Scrub: alternate A and D fast enough to clean a plate before the timer runs out.
-  private scrub(finish: Finish) {
+  // Scrub: alternate the strafe keys fast enough to clean a plate before the timer runs out.
+  private scrub(ctx: Context, finish: Finish) {
     const needed = 14;
     const limit = 5000;
+    const a = ctx.keys.left;
+    const d = ctx.keys.right;
     let strokes = 0;
     let lastKey = "";
     const start = performance.now();
     this.frame(
       "Dish pit: scrub",
-      "Alternate A and D to scrub. 14 strokes in 5 seconds.",
+      `Alternate ${keyName(a)} and ${keyName(d)} to scrub. ${needed} strokes in 5 seconds.`,
       `<div class="mg-row"><div class="mg-plate"><i></i></div></div>
        <div class="mg-meter"><b class="mg-fill mg-blue"></b></div>
        <div class="mg-score" id="mg-time">5.0s</div>`,
@@ -268,11 +348,11 @@ export class Minigames {
       raf = requestAnimationFrame(loop);
     };
     const onKey = (e: KeyboardEvent) => {
-      if ((e.code !== "KeyA" && e.code !== "KeyD") || e.code === lastKey) return;
+      if ((e.code !== a && e.code !== d) || e.code === lastKey) return;
       lastKey = e.code;
       strokes++;
       this.sfx.scrub();
-      fill.style.width = `${(strokes / needed) * 100}%`;
+      fill.style.transform = `scaleX(${strokes / needed})`;
       grime.style.opacity = String(1 - strokes / needed);
       if (strokes >= needed) finish({ action: "scrub" }, "Sparkling!");
     };

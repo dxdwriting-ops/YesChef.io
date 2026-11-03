@@ -18,6 +18,7 @@ export const SHOP: ShopItem[] = [
   { id: "knife", kind: "equipment", name: "Santoku Knife", blurb: "Prep: cut marks are 40% wider.", price: 150 },
   { id: "plancha", kind: "equipment", name: "Cast-Iron Plancha", blurb: "Grill: the sear window is 35% wider.", price: 250 },
   { id: "clogs", kind: "equipment", name: "Kitchen Clogs", blurb: "Walk and sprint 10% faster.", price: 200 },
+  { id: "tray", kind: "equipment", name: "Sheet Tray", blurb: "A fourth hand slot: carry 4 items at once.", price: 280, level: 2 },
   { id: "fryer", kind: "equipment", name: "Turbo Fryer", blurb: "Solo: fries are ready at 4.5s and burn later.", price: 300, level: 2 },
   { id: "cart", kind: "equipment", name: "Bus Cart", blurb: "Solo: plates come back after 3s, not 7.", price: 350, level: 3 },
   { id: "printer", kind: "equipment", name: "Ticket Printer", blurb: "Tickets flip 3s later and you get +1 peek.", price: 400, level: 4 },
@@ -61,6 +62,7 @@ export interface Perks {
   fryer?: boolean;
   cart?: boolean;
   printer?: boolean;
+  tray?: boolean; // personal, so it applies in multiplayer too
 }
 
 // ----- Daily login streak -----
@@ -92,6 +94,7 @@ const QUEST_POOL: Omit<Quest, "progress" | "done">[] = [
   { id: "burgers", kind: "serveRecipe", recipe: "burger", text: "Serve 6 Smash Burgers", target: 6, reward: 90 },
   { id: "fries", kind: "serveRecipe", recipe: "fries", text: "Serve 6 Fries", target: 6, reward: 90 },
   { id: "salads", kind: "serveRecipe", recipe: "salad", text: "Serve 4 Garden Salads", target: 4, reward: 100 },
+  { id: "rings", kind: "serveRecipe", recipe: "rings", text: "Serve 4 Onion Rings", target: 4, reward: 100 },
   { id: "score200", kind: "score", text: "Score 200 in a single shift", target: 200, reward: 110 },
   { id: "combo4", kind: "combo", text: "Hit a x4 combo streak", target: 4, reward: 100 },
   { id: "challenge", kind: "challenge", text: "Finish any challenge", target: 1, reward: 90 },
