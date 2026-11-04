@@ -110,7 +110,7 @@ input:focus-visible,
   position: fixed;
   inset: 0;
   display: grid;
-  place-items: center;
+  place-items: safe center;
   padding: 16px;
   overflow-y: auto;
   background:
@@ -1007,7 +1007,8 @@ button.row:disabled {
 }
 
 #title {
-  align-content: center;
+  /* "safe": in a short window the menu starts at the top and scrolls, instead of being cut off above. */
+  align-content: safe center;
   gap: 12px;
 }
 
