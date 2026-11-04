@@ -215,10 +215,10 @@ export class KitchenWorld {
     const every = Math.max(1, Math.ceil(lamps.length / 6));
     lamps.forEach(([x, z], i) => {
       this.scene.add(tbox(0.02, 0.6, 0.02, x, WALL_H - 0.3, z, basic("#1a1216")));
-      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.24, 8, 1, true), toon(this.layout.plaster, { side: THREE.DoubleSide }));
+      const shade = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.24, 16, 1, true), toon(this.layout.plaster, { side: THREE.DoubleSide }));
       shade.position.set(x, WALL_H - 0.66, z);
       this.scene.add(shade);
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), basic("#fff1c4"));
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), basic("#fff1c4"));
       bulb.position.set(x, WALL_H - 0.76, z);
       this.scene.add(bulb);
       if (i % every === 0) {
@@ -375,7 +375,7 @@ export class KitchenWorld {
         g.add(water);
         g.add(tbox(0.05, 0.45, 0.05, -W / 2 + 0.6, h + 0.22, -D / 2 + 0.15, mat("steel"))); // faucet
         g.add(tbox(0.05, 0.05, 0.3, -W / 2 + 0.6, h + 0.43, -D / 2 + 0.28, mat("steel")));
-        const plateGeo = new THREE.CylinderGeometry(0.16, 0.13, 0.04, 10);
+        const plateGeo = new THREE.CylinderGeometry(0.16, 0.13, 0.04, 20);
         for (let i = 0; i < 8; i++) {
           const clean = dynamic(new THREE.Mesh(plateGeo, toon("#f2f4f7")));
           clean.position.set(W / 2 - 0.3, h + 0.04 + i * 0.045, 0);
@@ -389,10 +389,10 @@ export class KitchenWorld {
         break;
       }
       case "trash": {
-        const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.3, h, 12), mat("binGreen"));
+        const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.3, h, 24), mat("binGreen"));
         bin.position.set(0, h / 2, 0);
         g.add(bin);
-        const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 12), toon("#2e5034"));
+        const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 24), toon("#2e5034"));
         lid.position.set(0, h + 0.03, 0);
         g.add(lid);
         this.label(def, h + 0.4);
@@ -407,7 +407,7 @@ export class KitchenWorld {
     this.addCollider(b.x, b.z, b.w, b.d);
     const colors = ["#e04f3f", "#f2b632", "#4fae3c", "#e04f3f"];
     colors.forEach((c, i) => {
-      const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.2, 6), toon(c));
+      const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.2, 12), toon(c));
       bottle.position.set(b.x + b.w / 2 - 0.25 - i * 0.12, h + 0.1, b.z - b.d / 2 + 0.2);
       this.scene.add(bottle);
     });
@@ -418,7 +418,7 @@ export class KitchenWorld {
       const x = b.x - (b.w - 1.2) / 2 + i * ((b.w - 1.2) / 3);
       const r = 0.1 + (i % 2) * 0.03;
       this.scene.add(tbox(0.01, 0.12, 0.01, x, 2.68, b.z, basic("#2b2326")));
-      const pan = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, 0.05, 10), i % 2 ? mat("steelDark") : toon("#b0623a"));
+      const pan = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, 0.05, 20), i % 2 ? mat("steelDark") : toon("#b0623a"));
       pan.rotation.z = Math.PI / 2;
       pan.position.set(x, 2.55 - r, b.z);
       this.scene.add(pan);
@@ -540,7 +540,7 @@ export class KitchenWorld {
       for (let i = 0; i <= 24; i++) {
         const x = -W / 2 + 0.3 + (i / 24) * (W - 0.6);
         const sag = Math.sin((i / 24) * Math.PI * 6) * 0.08;
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 5, 4), basic(colors[i % colors.length]));
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 6), basic(colors[i % colors.length]));
         bulb.position.set(x, 2.72 - Math.abs(sag), -D / 2 + 0.1);
         this.scene.add(bulb);
       }
@@ -549,7 +549,7 @@ export class KitchenWorld {
       // Over the first island, or over the middle of the aisle in open kitchens.
       const isl = this.layout.islands[0] ?? { x: pass.x, z: 0, w: Math.min(4, pass.w), d: 0.6 };
       for (let i = 0; i < 3; i++) {
-        const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 10), new THREE.MeshBasicMaterial({ color: "#e0412f" }));
+        const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 16), new THREE.MeshBasicMaterial({ color: "#e0412f" }));
         lantern.position.set(isl.x - isl.w / 3 + (i * isl.w) / 3, 2.3, isl.z + 0.35);
         this.scene.add(lantern);
         this.scene.add(tbox(0.34, 0.03, 0.34, lantern.position.x, 2.48, lantern.position.z, toon("#1a1216")));

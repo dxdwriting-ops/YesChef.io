@@ -77,7 +77,7 @@ export interface Settings {
 const KEY = "chefio.settings";
 
 export function defaultSettings(): Settings {
-  return { look: "hold", sensitivity: 1, invertY: false, quality: "hd", autoRes: true, showFps: false, keys: { ...DEFAULT_KEYS } };
+  return { look: "hold", sensitivity: 1, invertY: false, quality: "smooth", autoRes: true, showFps: false, keys: { ...DEFAULT_KEYS } };
 }
 
 export function loadSettings(): Settings {
@@ -92,6 +92,8 @@ export function loadSettings(): Settings {
       if (typeof raw.sensitivity === "number") s.sensitivity = Math.min(3, Math.max(0.25, raw.sensitivity));
       if (typeof raw.invertY === "boolean") s.invertY = raw.invertY;
       if (isQuality(raw.quality)) s.quality = raw.quality;
+      // HD was the default before the 3D look: move those players over once.
+      if (!raw.saw3d && s.quality === "hd") s.quality = "smooth";
       if (typeof raw.autoRes === "boolean") s.autoRes = raw.autoRes;
       if (typeof raw.showFps === "boolean") s.showFps = raw.showFps;
       for (const a of Object.keys(ACTIONS) as Action[]) if (typeof raw.keys?.[a] === "string") s.keys[a] = raw.keys[a];
@@ -104,7 +106,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, saw3d: true }));
   } catch {
     // Not remembered, but still applied for this visit.
   }

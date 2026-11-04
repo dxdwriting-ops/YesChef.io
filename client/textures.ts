@@ -1,8 +1,9 @@
-// Procedural pixel-art textures, painted on small canvases and sampled with nearest filtering.
+// Procedural pixel-art textures, painted on small canvases (filtering follows the look: see surfaceTexture).
 // Boxes get world-scale UVs (texelsPerMetre), so a texture never stretches on long counters.
 import * as THREE from "three";
 import { RECIPES, type RecipeId } from "../shared/game";
 import { iconCanvas } from "./icons";
+import { surfaceTexture } from "./render";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -28,10 +29,7 @@ function make(w: number, h: number, paint: (g: Ctx, r: () => number) => void, se
   const g = c.getContext("2d")!;
   g.imageSmoothingEnabled = false;
   paint(g, rng(seed));
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
+  const tex = surfaceTexture(new THREE.CanvasTexture(c));
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;

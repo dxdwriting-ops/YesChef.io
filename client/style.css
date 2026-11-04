@@ -42,6 +42,9 @@ body {
   cursor: default;
   touch-action: none;
 }
+#game.smooth {
+  image-rendering: auto;
+}
 
 /* Each look mode gets a cursor that says how it works. */
 #game[data-look="hold"] {
