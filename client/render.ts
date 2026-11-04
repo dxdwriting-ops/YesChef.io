@@ -1,5 +1,6 @@
 // Two looks share one pipeline. "3D": the scene at full resolution with antialiasing, soft toon
-// shading, thin ink outlines (depth + normal edges), a warm grade and a vignette. The pixel looks
+// shading, thin ink outlines (depth + normal edges), a warm grade and a vignette; "3D Ultra" adds
+// ambient occlusion (from the depth and normal buffers) and a glow around lights. The pixel looks
 // render at a low resolution instead and add a dithered, posterized palette; CSS upscales them
 // with image-rendering: pixelated.
 import * as THREE from "three";
@@ -7,20 +8,22 @@ import * as THREE from "three";
 /** Sprites (icons, labels) live on this layer so they skip the normal pass and its outlines. */
 export const SPRITE_LAYER = 1;
 
-export type Quality = "smooth" | "retro" | "sharp" | "hd";
+export type Quality = "ultra" | "smooth" | "retro" | "sharp" | "hd";
 export const QUALITY_LABEL: Record<Quality, string> = {
+  ultra: "3D Ultra (shading + glow)",
   smooth: "3D (smooth)",
   retro: "Retro (chunky pixels)",
   sharp: "Sharp",
   hd: "HD + shadows",
 };
-const QUALITY_ORDER: Quality[] = ["smooth", "retro", "sharp", "hd"];
+const QUALITY_ORDER: Quality[] = ["ultra", "smooth", "retro", "sharp", "hd"];
 export function nextQuality(q: Quality): Quality {
   return QUALITY_ORDER[(QUALITY_ORDER.indexOf(q) + 1) % QUALITY_ORDER.length];
 }
 export function isQuality(v: unknown): v is Quality {
   return typeof v === "string" && (QUALITY_ORDER as string[]).includes(v);
 }
+const is3d = (q: Quality) => q === "ultra" || q === "smooth";
 
 const POST_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -40,6 +43,10 @@ uniform float cameraFar;
 uniform vec3 inkColor;
 uniform float levels;
 uniform float smoothLook;
+uniform float aoStrength;
+uniform sampler2D tBloom;
+uniform float bloomStrength;
+uniform vec2 projScale; // projection matrix [0][0], [1][1]
 varying vec2 vUv;
 
 float viewDepth(vec2 uv) {
@@ -48,6 +55,29 @@ float viewDepth(vec2 uv) {
 
 vec3 viewNormal(vec2 uv) {
   return texture2D(tNormal, uv).xyz * 2.0 - 1.0;
+}
+
+vec3 viewPos(vec2 uv) {
+  float z = perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar);
+  return vec3((uv * 2.0 - 1.0) / projScale * -z, z);
+}
+
+// Ambient occlusion: how much nearby geometry faces this pixel, sampled in a rotated spiral.
+float ambientOcclusion(vec2 uv, vec3 n) {
+  const int N = 14;
+  const float R = 0.45; // metres
+  vec3 p = viewPos(uv);
+  float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  vec2 rUv = vec2(R * projScale.x, R * projScale.y) / -p.z * 0.5;
+  float occ = 0.0;
+  for (int i = 0; i < N; i++) {
+    float t = (float(i) + noise) / float(N);
+    float a = (float(i) + noise) * 2.39996;
+    vec3 q = viewPos(uv + vec2(cos(a), sin(a)) * rUv * t) - p;
+    float l = length(q);
+    occ += max(0.0, dot(n, q) / (l + 1e-4) - 0.1) * (1.0 - smoothstep(R * 0.6, R * 1.6, l));
+  }
+  return clamp(1.0 - occ / float(N) * 1.6, 0.0, 1.0);
 }
 
 float bayer4(vec2 p) {
@@ -70,6 +100,8 @@ void main() {
   bool edge = depthEdge > 0.05 + d * 0.04 || (normalEdge > 0.35 && d < 14.0);
 
   vec3 col = texture2D(tColor, vUv).rgb;
+  if (aoStrength > 0.0 && d < cameraFar * 0.9) col *= mix(1.0, ambientOcclusion(vUv, n), aoStrength);
+  if (bloomStrength > 0.0) col += texture2D(tBloom, vUv).rgb * bloomStrength;
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 
@@ -93,6 +125,31 @@ void main() {
   gl_FragColor.rgb = c;
 }`;
 
+// Glow: keep only the brightest parts of the image, then blur them at quarter resolution.
+const BLOOM_FRAG = /* glsl */ `
+uniform sampler2D tInput;
+uniform vec2 texel;
+uniform vec2 dir;
+uniform float threshold; // > 0 on the first pass: extract the bright parts
+varying vec2 vUv;
+void main() {
+  if (threshold > 0.0) {
+    vec3 c = vec3(0.0);
+    for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) c += texture2D(tInput, vUv + vec2(x, y) * texel * 1.5).rgb;
+    c /= 9.0;
+    float l = max(c.r, max(c.g, c.b));
+    gl_FragColor = vec4(c * smoothstep(threshold, threshold * 1.6, l), 1.0);
+    return;
+  }
+  float w[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
+  vec3 c = texture2D(tInput, vUv).rgb * w[0];
+  for (int i = 1; i < 5; i++) {
+    vec2 o = dir * texel * float(i);
+    c += (texture2D(tInput, vUv + o).rgb + texture2D(tInput, vUv - o).rgb) * w[i];
+  }
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
 export class PixelRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
@@ -102,6 +159,10 @@ export class PixelRenderer {
   private readonly post: THREE.ShaderMaterial;
   private readonly postScene = new THREE.Scene();
   private readonly postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly bloom: THREE.ShaderMaterial;
+  private readonly bloomScene = new THREE.Scene();
+  private bloomA!: THREE.WebGLRenderTarget;
+  private bloomB!: THREE.WebGLRenderTarget;
   private scale = 1; // dynamic resolution: 1 is the quality preset's full size
 
   constructor(
@@ -127,11 +188,23 @@ export class PixelRenderer {
         inkColor: { value: new THREE.Color("#1a1216") },
         levels: { value: 8 },
         smoothLook: { value: 0 },
+        aoStrength: { value: 0 },
+        tBloom: { value: null },
+        bloomStrength: { value: 0 },
+        projScale: { value: new THREE.Vector2(1, 1) },
       },
       depthTest: false,
       depthWrite: false,
     });
     this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.post));
+    this.bloom = new THREE.ShaderMaterial({
+      vertexShader: POST_VERT,
+      fragmentShader: BLOOM_FRAG,
+      uniforms: { tInput: { value: null }, texel: { value: new THREE.Vector2() }, dir: { value: new THREE.Vector2() }, threshold: { value: 0 } },
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.bloomScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.bloom));
 
     this.applyLook();
     this.resize();
@@ -168,10 +241,13 @@ export class PixelRenderer {
 
   /** Shadows, shading ramp, texture filtering and canvas scaling for the current quality. */
   private applyLook() {
-    const smooth = this.quality === "smooth";
+    const smooth = is3d(this.quality);
+    const ultra = this.quality === "ultra";
     this.renderer.shadowMap.enabled = smooth || this.quality === "hd";
     this.renderer.shadowMap.type = smooth ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.post.uniforms.smoothLook.value = smooth ? 1 : 0;
+    this.post.uniforms.aoStrength.value = ultra ? 0.9 : 0;
+    this.post.uniforms.bloomStrength.value = ultra ? 0.8 : 0;
     this.canvas.classList.toggle("smooth", smooth);
     setSmoothLook(smooth, this.renderer.capabilities.getMaxAnisotropy());
   }
@@ -179,7 +255,7 @@ export class PixelRenderer {
   resize() {
     const aspect = window.innerWidth / Math.max(1, window.innerHeight);
     const ih = window.innerHeight;
-    const smooth = this.quality === "smooth";
+    const smooth = is3d(this.quality);
     // 3D: native resolution (up to 2x on high-DPI screens). Retro: chunky pixels. Sharp: twice the detail. HD: close to native, smoother colour steps.
     const h = Math.round(
       this.scale *
@@ -191,13 +267,15 @@ export class PixelRenderer {
           ? Math.min(540, Math.max(360, ih / 1.8))
           : Math.min(1080, Math.max(540, ih * 0.9))),
     );
-    this.post.uniforms.levels.value = { smooth: 32, retro: 8, sharp: 11, hd: 18 }[this.quality];
+    this.post.uniforms.levels.value = { ultra: 32, smooth: 32, retro: 8, sharp: 11, hd: 18 }[this.quality];
     const w = Math.max(1, Math.round(h * aspect));
     this.renderer.setSize(w, h, false);
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
+    const pm = this.camera.projectionMatrix.elements;
+    this.post.uniforms.projScale.value.set(pm[0], pm[5]);
 
     this.target?.dispose();
     this.normalTarget?.dispose();
@@ -210,6 +288,24 @@ export class PixelRenderer {
     this.post.uniforms.tDepth.value = depthTexture;
     this.post.uniforms.tNormal.value = this.normalTarget.texture;
     this.post.uniforms.resolution.value.set(w, h);
+
+    this.bloomA?.dispose();
+    this.bloomB?.dispose();
+    const bw = Math.max(1, Math.round(w / 4)), bh = Math.max(1, Math.round(h / 4));
+    const bopts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType };
+    this.bloomA = new THREE.WebGLRenderTarget(bw, bh, bopts);
+    this.bloomB = new THREE.WebGLRenderTarget(bw, bh, bopts);
+    this.bloom.uniforms.texel.value.set(1 / bw, 1 / bh);
+    this.post.uniforms.tBloom.value = this.bloomA.texture;
+  }
+
+  private bloomPass(input: THREE.Texture, out: THREE.WebGLRenderTarget, dir: [number, number], threshold = 0) {
+    const u = this.bloom.uniforms;
+    u.tInput.value = input;
+    u.dir.value.set(...dir);
+    u.threshold.value = threshold;
+    this.renderer.setRenderTarget(out);
+    this.renderer.render(this.bloomScene, this.postCamera);
   }
 
   render(scene: THREE.Scene) {
@@ -232,6 +328,17 @@ export class PixelRenderer {
     scene.overrideMaterial = null;
     scene.background = bg;
     scene.fog = fog;
+
+    if (this.quality === "ultra") {
+      // The first pass reads the full image with 1.5-texel steps, so nothing small is missed.
+      this.bloom.uniforms.texel.value.set(1 / this.target.width, 1 / this.target.height);
+      this.bloomPass(this.target.texture, this.bloomA, [0, 0], 0.86);
+      this.bloom.uniforms.texel.value.set(1 / this.bloomA.width, 1 / this.bloomA.height);
+      for (const spread of [1, 2]) {
+        this.bloomPass(this.bloomA.texture, this.bloomB, [spread, 0]);
+        this.bloomPass(this.bloomB.texture, this.bloomA, [0, spread]);
+      }
+    }
 
     r.setRenderTarget(null);
     r.render(this.postScene, this.postCamera);

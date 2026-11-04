@@ -33,15 +33,24 @@ function buildChef(color: string, name: string, look: Pick<PlayerView, "skin" | 
     const arm = add(new RoundedBoxGeometry(0.12, 0.5, 0.14, 3, 0.05), white, 1.05, 0.06);
     arm.position.x = s * 0.31;
     arm.rotation.x = -0.5; // arms forward, carrying
-    const hand = add(new RoundedBoxGeometry(0.1, 0.1, 0.1, 3, 0.04), skin, 0.86, 0.22);
+    const hand = add(new THREE.SphereGeometry(0.06, 14, 10), skin, 0.86, 0.22);
     hand.position.x = s * 0.31;
+    const shoe = add(new RoundedBoxGeometry(0.17, 0.08, 0.26, 2, 0.035), toon("#1a1216"), 0.04, 0.03);
+    shoe.position.x = s * 0.1;
   }
   add(new RoundedBoxGeometry(0.5, 0.6, 0.3, 4, 0.1), white, 1.05); // jacket
   for (const y of [1.2, 1.05, 0.9]) add(new THREE.BoxGeometry(0.04, 0.04, 0.02), toon("#1a1216"), y, 0.16).position.x = 0.12; // buttons
   add(new THREE.BoxGeometry(0.42, 0.45, 0.02), toon(color), 0.95, 0.165); // apron
   add(new RoundedBoxGeometry(0.34, 0.08, 0.32, 2, 0.035), toon(color), 1.37); // neckerchief
   add(new RoundedBoxGeometry(0.3, 0.3, 0.3, 4, 0.09), skin, 1.55); // head
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.05, 0.01), toon("#1a1216"), 1.58, 0.155).position.x = s * 0.07; // eyes
+  for (const s of [-1, 1]) {
+    add(new THREE.SphereGeometry(0.028, 10, 8), toon("#1a1216"), 1.58, 0.145).position.x = s * 0.07; // eyes
+    add(new THREE.SphereGeometry(0.009, 6, 4), toon("#ffffff"), 1.59, 0.172).position.x = s * 0.07 + 0.008; // eye shine
+    const brow = add(new RoundedBoxGeometry(0.07, 0.018, 0.02, 1, 0.008), toon("#3a2a24"), 1.64, 0.152);
+    brow.position.x = s * 0.07;
+    brow.rotation.z = s * -0.12;
+  }
+  add(new THREE.SphereGeometry(0.03, 10, 8), skin, 1.53, 0.16); // nose
   add(new THREE.BoxGeometry(0.1, 0.02, 0.01), toon("#9a4a3a"), 1.49, 0.155); // smile
   switch (look.hat) {
     case "hat-tall":
